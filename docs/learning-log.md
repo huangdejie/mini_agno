@@ -19,8 +19,8 @@
 |---|---|---|---|
 | 0 | 全局架构 + 项目骨架 | ✅ 完成 | 2026-08-05 |
 | 1 | 核心数据模型（Message/Response） | ✅ 完成 | 2026-08-05 |
-| 2 | Model 抽象（多厂商可插拔） | ⬅️ 下一个 | — |
-| 3 | 工具系统 | 未开始 | — |
+| 2 | Model 抽象（多厂商可插拔） | ✅ 完成 | 2026-08-06 |
+| 3 | 工具系统 | 🔧 进行中（Function 已完成，`@tool` 待补） | — |
 | 4 | Agent 主循环（里程碑 M1） | 未开始 | — |
 | 5 | 结构化输出 | 未开始 | — |
 | 6 | 会话与持久化 | 未开始 | — |
@@ -73,16 +73,20 @@
 
 ---
 
-## 明天从哪开始
+## 下一步从哪开始
 
-**模块 2 · Model 抽象（多厂商可插拔）**
+**先收尾模块 3 · 工具系统**
 
-- 读 agno `models/base.py:130` 的 `Model(ABC)`，看它的 4 个抽象方法（`invoke` / `ainvoke` / `invoke_stream` / `ainvoke_stream`）
-- 读一个具体实现（`models/openai/`），看它怎么把统一契约翻译成厂商 SDK 调用
-- 在 mini-agno 实现 `Model(ABC)` + 第一个实现（OpenAI 或先写个 mock 假模型，便于离线测试）
-- 验收：`model.invoke(messages) -> ModelResponse`
+- 补 `tools/decorator.py`：实现 `@tool` 装饰器，把普通函数自动包成 `Function` 对象（对标 agno `tools/decorator.py`）
+- 验收：`@tool` 修饰的函数能生成正确的 JSON schema，并能被 `FunctionCall.execute()` 执行
 
-详细任务卡见 agno 仓库 `docs/agno-source-code-guide.md` 的「模块 2」一节。
+**然后进模块 4 · Agent 主循环（里程碑 M1）**
+
+- 读 agno `agent/agent.py` 的 `run` + `run/` 目录，看"配置（Agent）"和"执行（run 循环）"怎么分离
+- 把 Model + Tools 串起来：Agent 拿到消息 → 调 Model → 解析 tool calls → 用 `FunctionCall` 执行 → 把结果喂回 Model
+- 验收（里程碑 M1）：能跑一个带工具的 agent（先用 `MockModel` 离线验证，再接真模型）
+
+详细任务卡见 agno 仓库 `docs/agno-source-code-guide.md` 的「模块 3 / 模块 4」一节。
 
 ## 环境备忘
 
