@@ -1,7 +1,20 @@
 [project]
 name = "mini-agno"
 version = "0.1.0"
-description = "Add your description here"
+description = "A minimal agent framework built from scratch to learn how agno is designed (12-module build-to-learn project)."
 readme = "README.md"
 requires-python = ">=3.12"
-dependencies = []
+dependencies = [
+    "pydantic>=2.0",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+    "black>=26.5.1",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+addopts = "-v"
