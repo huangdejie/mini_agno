@@ -19,13 +19,16 @@ def test_add_schema():
         },
     }
 
+
 def test_function_execute():
     func = Function(entrypoint=add)
     funcallable = FunctionCall(function=func, arguments={"a": 1, "b": 2})
     assert funcallable.execute() == 3
 
+
 def init_num():
     return 0
+
 
 def test_function_call_none_param_execute():
     func = Function(entrypoint=init_num)

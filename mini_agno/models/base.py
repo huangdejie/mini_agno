@@ -9,6 +9,8 @@ class Model(ABC):
     id: str
 
     @abstractmethod
-    def invoke(self, messages: list[Message]) -> ModelResponse:
+    def invoke(
+        self, messages: list[Message], tools: list[dict] | None = None
+    ) -> ModelResponse:
         """Invoke the model with a list of messages."""
         pass
