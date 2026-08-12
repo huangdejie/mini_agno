@@ -17,14 +17,16 @@ class Function:
         self.description = self.entrypoint.__doc__ or ""
         type_hints = get_type_hints(self.entrypoint)
         properties = {
-            k: {"type": type_map.get(v, "string")} for k, v in type_hints.items() if k != "return"
+            k: {"type": type_map.get(v, "string")}
+            for k, v in type_hints.items()
+            if k != "return"
         }
         # 获取含类型注解的参数定义，去除返回参数,没有类型参数的不包含在这里面
         hint_names = set(type_hints) - {"return"}
         # 获取所有参数名
-        all_params = set(signature(self.entrypoint).parameters)   # 所有参数名
+        all_params = set(signature(self.entrypoint).parameters)  # 所有参数名
         # 获取没有类型注解的参数名
-        no_hint = [p for p in all_params if p not in hint_names]   # 没注解的
+        no_hint = [p for p in all_params if p not in hint_names]  # 没注解的
         if no_hint:
             # 如果有参数没有类型注解，则报错
             raise ValueError(
@@ -34,7 +36,7 @@ class Function:
         self.parameters = {
             "type": "object",
             "properties": properties,
-            "required": [p for p in self._get_required_params() if p in hint_names]
+            "required": [p for p in self._get_required_params() if p in hint_names],
         }
 
     def _get_required_params(self) -> list:

@@ -4,6 +4,7 @@ from mini_agno.models.message import Message, ModelResponse, ToolCall
 from mini_agno.tools.function import Function, FunctionCall
 import json
 
+
 @dataclass
 class Agent:
     model: Model
@@ -24,7 +25,9 @@ class Agent:
             iteration += 1
             if iteration > self.max_iterations:
                 raise RuntimeError("Max iterations reached")
-            resp = self.model.invoke(messages=messages, tools=[t.to_dict() for t in self.tools])
+            resp = self.model.invoke(
+                messages=messages, tools=[t.to_dict() for t in self.tools]
+            )
             if resp.tool_calls:
                 # 先记录“助手决定调用这些工具”
                 messages.append(
@@ -50,10 +53,12 @@ class Agent:
                         func_result = func_call.execute()
                     except Exception as e:
                         func_result = f"Error executing {tool_call.name}: {e}"
-                    messages.append(Message(
-                        role="tool",
-                        content=json.dumps(func_result,default=str),
-                        tool_call_id=tool_call.id,
-                    ))
+                    messages.append(
+                        Message(
+                            role="tool",
+                            content=json.dumps(func_result, default=str),
+                            tool_call_id=tool_call.id,
+                        )
+                    )
             else:
                 return resp.content

@@ -6,12 +6,14 @@ from mini_agno.models.message import Message
 def test_abstract_model_cannot_be_instantiated():
     with pytest.raises(TypeError):
         from mini_agno.models.base import Model
+
         model = Model(id="test_model")
 
 
 def test_mock_model():
     from mini_agno.models.mock import MockModel
     from mini_agno.models.message import ModelResponse
+
     resp1 = ModelResponse(content="mocked response 1")
     resp2 = ModelResponse(content="mocked response 2")
     response_list = [resp1, resp2]

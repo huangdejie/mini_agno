@@ -3,6 +3,7 @@ from mini_agno.models.base import Model
 from mini_agno.models.message import Message, ModelResponse
 import logging
 
+
 class MockModel(Model):
 
     def __init__(self, id: str, response_list: list[ModelResponse]):
@@ -24,7 +25,7 @@ class MockModel(Model):
         """Invoke the model with a list of messages."""
         msg = ""
         for message in messages:
-            msg += (message.content or "")
+            msg += message.content or ""
         logging.debug(f"正在调用模型{self.id}...,消息:{msg}")
         resp = self._next()
         logging.debug(f"模型{self.id}返回:{resp}")
