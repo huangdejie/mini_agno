@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from typing import Any
 from mini_agno.models.base import Model
 from mini_agno.models.message import Message, ModelResponse, ToolCall
 from mini_agno.tools.function import Function, FunctionCall
@@ -10,6 +11,7 @@ class Agent:
     model: Model
     tools: list[Function]
     max_iterations: int = 10
+    output_schema: type | None = None  # 传Weather这种Pydantic类，不传就是自由文本
 
     def _find_tool_call(self, tool_call: ToolCall) -> Function:
         for tool in self.tools:
@@ -17,7 +19,7 @@ class Agent:
                 return tool
         return None
 
-    def run(self, user_message: str) -> str:
+    def run(self, user_message: str) -> Any:
         iteration = 0
         user_msg = Message(role="user", content=user_message)
         messages = [user_msg]
@@ -61,4 +63,7 @@ class Agent:
                         )
                     )
             else:
+                # 如果有输出结构，则进行结构化输出
+                if self.output_schema is not None:
+                    return self.output_schema.model_validate_json(resp.content)
                 return resp.content
