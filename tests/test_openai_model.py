@@ -6,6 +6,7 @@
   这层逻辑出错的概率最高（role 分流、content 为 None、arguments dumps/loads 方向）。
 - 真模型端到端验证靠 `uv run python examples/run_bake_demo.py` 手动跑。
 """
+
 import json
 from unittest.mock import MagicMock
 
