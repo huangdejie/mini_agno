@@ -10,12 +10,15 @@ def test_add_schema():
     func = Function(entrypoint=add)
     print(func.to_dict())
     assert func.to_dict() == {
-        "name": "add",
-        "description": "Add two numbers together",
-        "parameters": {
-            "type": "object",
-            "properties": {"a": {"type": "integer"}, "b": {"type": "integer"}},
-            "required": ["a", "b"],
+        "type": "function",
+        "function": {
+            "name": "add",
+            "description": "Add two numbers together",
+            "parameters": {
+                "type": "object",
+                "properties": {"a": {"type": "integer"}, "b": {"type": "integer"}},
+                "required": ["a", "b"],
+            },
         },
     }
 

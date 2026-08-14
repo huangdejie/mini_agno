@@ -113,13 +113,91 @@
 
 ---
 
+## 2026-08-13（Day 3，接续）
+
+### 进度对齐（补记 Day 2 之后实际做的事）
+
+上次日志记到 Day 2 结束（M1 达成），但之后其实又推进了三块，只是没写日志。现状：
+
+**`@tool` 装饰器（模块 3 补完）**
+- 实现 `mini_agno/tools/decorator.py`：`tool(func)` → 包一层 `Function(entrypoint=func)` 返回
+- 这样 `@tool` 装饰普通函数即可注册工具（之前只能手动 `Function(entrypoint=...)`）
+- 测试 `test_decorator.py` 通过
+
+**结构化输出（模块 5 主体）**
+- `Agent` 加 `output_schema: type | None` 字段
+- `run()` 收尾分支：`else` 分支里 `if output_schema: return output_schema.model_validate_json(resp.content)`，否则返回 `resp.content`
+- 测试 `test_structured_output.py`：MockModel 返回 `Weather` 的 JSON → agent 还原成 `Weather` 实例。通过
+- **注意**：现在是「靠 prompt 让模型自己吐符合 schema 的 JSON，然后客户端 parse」。还没用上 OpenAI 原生的 `response_format`/structured output 功能（那是接真模型时该升级的点）
+
+**接真模型（模块 5 前置/模块 2 补完）**
+- 新增 `mini_agno/models/openai_model.py`（用 openai SDK，默认接 deepseek-chat，base_url 指向 deepseek）
+- `pyproject.toml` 加 `openai>=3.0.0` 依赖（已 `uv sync`，uv.lock 已更新）
+- `invoke()` **还没实现**——只写了签名和注释，转换逻辑待写
+
+**Day 2 待办完成情况**
+- [x] tool 结果消息加 `tool_call_id` 字段（Message 已有 `tool_call_id`，agent.py 已正确回链 `tool_call_id=tool_call.id`）✓
+- [ ] 接真模型时的消息协议转换（openai_model.invoke 待写）
+
+### 当前 mini-agno 状态（16 个测试全绿）
+- `models/`：message.py（含 tool_call_id）、base.py（Model ABC）、mock.py（MockModel）、openai_model.py（骨架，invoke 未实现）
+- `tools/`：function.py（Function/FunctionCall）、decorator.py（@tool）
+- `agent.py`：ReAct 主循环 + output_schema 结构化输出分支
+- `tests/`：16 个全过
+
+### Day 3 收尾要做的（模块 5 真正完成）
+1. **写完 `OpenAIModel.invoke()`**：mini-agno 的 `Message` 列表 ↔ OpenAI SDK 的 `dict` 列表互转，调 `client.chat.completions.create(...)`，把返回翻回 `ModelResponse`
+2. **接真模型跑通一次**：需要 `DEEPSEEK_API_KEY`（现在 shell 里没设）。用 `.env` 或 `export`
+3. （可选升级）结构化输出用真模型时，改用 OpenAI 原生的 `response_format` 而非纯靠 prompt
+
+---
+
+## 2026-08-14（Day 4，模块 5 收官）
+
+### 完成的事
+
+**`OpenAIModel.invoke()` 写完 + 真模型端到端打通 🎯**
+- 写完 `_message_to_openai_dict()`（Message → OpenAI dict，按 role 分流：user/assistant/tool 三类，`content` 为 None 不放 key）
+- 写完 `invoke()`：出站转 dict → 组 kwargs → `client.chat.completions.create(**kwargs)` → 入站把 `choice.message` 翻回 `ModelResponse`
+- **5 项离线 mock 自测全过**：tool 结果消息 / assistant 带 tool_calls / 普通 user 消息 / invoke 纯文本 / invoke 带 tool_calls 入站翻译（arguments JSON 字符串 → dict）
+- **真 deepseek API 打通**（export DEEPSEEK_API_KEY 后 `Agent(model=OpenAIModel()).run(...)` 真能回话）
+
+### Day 4 学到的关键点
+
+**概念：`tools`（参数）vs messages 里的 `tool_calls`——最易混的一对**
+- `tools` = **工具清单/能力声明**（"我有哪些工具"），每次调模型**全量传**，**从不在 messages 里**
+- messages 里的 `tool_calls` = **历史动作记录**（"模型上轮决定调了啥"），模型自己生成，append 进历史
+- messages 里 `role="tool"` + `tool_call_id` = **历史结果**（"工具执行返回了啥"），用 `tool_call_id` 和上面的动作配对（≈ correlationId）
+- 为什么要每次重传 `tools`：**模型无状态**，每次调用独立，不记得上一轮的工具清单
+
+**坑 & 易错点**
+- `arguments` 出站用 `json.dumps`（dict→JSON 字符串），入站用 `json.loads`（JSON 字符串→dict）——**方向必须对称**，搞反就错
+- OpenAI tool_calls 元素必须有 `"type": "function"` 字段（固定字符串，不是变量）
+- `content=None` 的消息别放 `"content"` 这个 key（很多厂商对 `content:null` 报错），按需加
+- **测试时构造 OpenAIModel 要塞假 key**：`OpenAI()` 在 `__init__` 就校验 key，key 为空直接抛 `OpenAIError`，连 `invoke()` 都走不到——mock 测时记得 `DEEPSEEK_API_KEY="fake" `uv run ...`
+- **MockModel 不读 messages**，会掩盖消息协议错误（Day 2 已记）；接真模型后才暴露出 `_message_to_openai_dict` 的嵌套 bug——真模型是验证消息协议的最佳试金石
+- **mock MagicMock 时 `MagicMock(name='add')` 会被当实例名吞掉**，要用 `configure_mock(name='add')` 或直接构造 message 属性
+
+### 当前 mini-agno 状态
+- `models/`：message.py、base.py（Model ABC）、mock.py（MockModel）、**openai_model.py（invoke 完整，真模型已通）**
+- `tools/`：function.py（Function/FunctionCall）、decorator.py（@tool）
+- `agent.py`：ReAct 主循环 + output_schema 结构化输出分支
+- `tests/`：16 个全过
+- **模块 5 完成**：结构化输出 + 真模型接入
+
+### 待办（记着）
+- [ ] 删草稿 `mini_agno/t.py`（untracked，别污染仓库）
+- [ ]（可选）把 openai_model 的 mock 自测固化成 `tests/test_openai_model.py`
+- [ ]（可选升级）结构化输出改用 OpenAI 原生 `response_format`，而非纯靠 prompt 让模型吐 JSON
+
+---
+
 ## 明天从哪开始
 
-**模块 5 · 结构化输出**
-- 让 agent 返回强类型对象（Pydantic 模型）而不是自由文本
-- 对应 agno `agent.py` 的 `output_schema` 参数
-- 验收：agent.run 返回某个 Pydantic 模型实例（如 `Weather(city, temp)`）
-- 详细任务卡见 agno 仓库 `docs/agno-source-code-guide.md` 的「模块 5」
+**模块 6 · 会话持久化**
+- 让 agent 跨多次 `run()` 记住对话（多轮会话）
+- 对应 agno 的 session/db 机制；mini-agno 先做内存版 Session store
+- 验收：同一个 Agent，run("我叫张三") 后 run("我叫什么") 能答对
 
 ## 环境备忘
 

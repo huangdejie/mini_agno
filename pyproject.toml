@@ -5,6 +5,7 @@ description = "A minimal agent framework built from scratch to learn how agno is
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
+    "openai>=3.0.0",
     "pydantic>=2.0",
 ]
 

@@ -1,8 +1,8 @@
-from mini_agno.tools.decorator import tool
+from mini_agno.tools.decorator import my_tool
 from mini_agno.tools.function import Function, FunctionCall
 
 
-@tool
+@my_tool
 def add(a: int, b: int) -> int:
     return a + b
 

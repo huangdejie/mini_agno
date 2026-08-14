@@ -11,7 +11,7 @@ class Weather(BaseModel):
 
 
 def test_structured_output():
-    weather = Weather(city='Beijing', temperature=25)
+    weather = Weather(city="Beijing", temperature=25)
 
     mock_model = MockModel(
         id="test_model",
@@ -22,8 +22,8 @@ def test_structured_output():
             )
         ],
     )
-    agent = Agent(model=mock_model,tools=[], output_schema=Weather)
+    agent = Agent(model=mock_model, tools=[], output_schema=Weather)
     res = agent.run("beijing天气怎么样")
     assert isinstance(res, Weather)
-    assert res.city == 'Beijing'
+    assert res.city == "Beijing"
     assert res.temperature == 25
