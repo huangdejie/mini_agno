@@ -11,11 +11,12 @@
 
 预期：第二轮能答出"你叫张三、是程序员"——说明历史真的带上了（记住了）。
 """
+
 from mini_agno.agent import Agent
 from mini_agno.models.openai_model import OpenAIModel
 
 if __name__ == "__main__":
     agent = Agent(model=OpenAIModel(), tools=[])
-    print("第一轮：", agent.run("我叫张三，是个程序员"))
-    print("第二轮：", agent.run("我叫谁？职业是什么？"))
-    print("历史消息数：", len(agent.messages))   # 预期 4（user+assistant × 2）
+    print("第一轮：", agent.run(user_message="我叫张三，是个程序员", session_id="zhen_test"))
+    print("第二轮：", agent.run(user_message="我叫谁？职业是什么？", session_id="zhen_test"))
+    print("历史消息数：", len(agent.sessions['zhen_test'].messages))  # 预期 4（user+assistant × 2）
