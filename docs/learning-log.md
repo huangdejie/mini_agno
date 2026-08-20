@@ -22,8 +22,8 @@
 | 2 | Model 抽象（多厂商可插拔） | ✅ 完成 | 2026-08-06 |
 | 3 | 工具系统（Function/FunctionCall） | ✅ 完成 | 2026-08-06 |
 | 4 | **Agent 主循环**（里程碑 M1）🎯 | ✅ 完成 | 2026-08-06 |
-| 5 | 结构化输出 | ⬅️ 下一个 | — |
-| 6 | 会话与持久化 | 未开始 | — |
+| 5 | 结构化输出 | ✅ 完成 | 2026-08-14 |
+| 6 | 会话与持久化 | 🔧 进行中（⬅️ 下一个：Step3 持久化） | 2026-08-14 |
 | 7 | 记忆系统 | 未开始 | — |
 | 8 | RAG 知识库 | 未开始 | — |
 | 9 | 多智能体（Team） | 未开始 | — |
@@ -186,18 +186,65 @@
 - **模块 5 完成**：结构化输出 + 真模型接入
 
 ### 待办（记着）
-- [ ] 删草稿 `mini_agno/t.py`（untracked，别污染仓库）
-- [ ]（可选）把 openai_model 的 mock 自测固化成 `tests/test_openai_model.py`
+- [x] 删草稿 `mini_agno/t.py`（已删）
+- [x] 把 openai_model 的 mock 自测固化成 `tests/test_openai_model.py`（已完成）
 - [ ]（可选升级）结构化输出改用 OpenAI 原生 `response_format`，而非纯靠 prompt 让模型吐 JSON
+
+---
+
+## 2026-08-14（Day 4 晚间续，模块 6 上半场）
+
+> 补记：Day 4 收官后又推进了模块 6 的"会话"半场（两笔 commit），当天没写日志。
+
+### 完成的事
+
+**模块 6 Step1（commit `c457715`）· 多轮会话记忆**
+- Agent 加 `messages` 字段（`field(default_factory=list)`），run() 累积历史，assistant 最终回答也进历史
+- 新增 `tests/test_session.py` 初版：历史累积 + 可变默认值不共享
+- 真模型多轮验证脚本 `examples/run_session_demo.py`（手动跑，不进 pytest）
+- 新增 `docs/knowledge.md`（模块 0-5 知识手册）
+- pyproject 加 build-system(hatchling)：uv 改为 editable 安装
+
+**模块 6 Step2（commit `a2f5439`）· 抽离 Session，Agent 无状态化**
+- 新增 `mini_agno/session.py`：`Session(session_id, messages)` 独立持有历史
+- Agent 无状态化：`sessions: dict[str, Session]` + `_get_or_create_session()`，`run(user_message, session_id="default")`
+- 测试三个：历史累积 / 默认值不共享 / 多会话隔离（s1、s2 互不串话）
+
+### 学到的关键点
+- **Agent 无状态 + Session 持状态 + 按 session_id 隔离**——对应 agno 的设计（行为与状态分离）
+- `=[]` 可变默认值共享坑在实战中防住了：`field(default_factory=list)`，且有回归测试盯着
+- Session History 只是"会话内重放原文"，换 session_id 就忘；跨会话记得要靠 Memory（模块 7）——三种"记得"的分界见 Obsidian 笔记《Agent定义》
+
+### 当前 mini-agno 状态
+- 24 个测试全绿；模块 6 "会话"半场完成，"持久化"（Step3）未开始
+
+---
+
+## 2026-08-19~20（Day 5，笔记体系整理，无代码）
+
+### 完成的事
+- mini-agno 推到 GitHub（`huangdejie/mini_agno`），只留 main 分支
+- 知识库分工落地：**日志（本文件）记过程，概念笔记记结论**（家在 Obsidian `30-knowledge/ai/`）
+- Obsidian 整理出《Agent定义》（含 Memory 在流程中的位置）+《mini_agno学习》（ReAct 主循环 / 消息协议 / 工具系统 / 模型可插拔）
+
+### 整理笔记时新学到的点
+- **防腐层（ACL）吃透了**：`openai_model.py` 整个文件就是防腐层，出站/入站两道关卡；检验标准 = "厂商怪癖被几个文件知道"（mini-agno 是 1 个，满分）
+- Model 层翻译的不只是工具信息，是**整份请求 + 整份响应**：出站还有调用参数 / response_format，入站还有 usage / finish_reason / reasoning_content——**这几个 mini-agno 都没接，待办**
+- 字段位置三层：usage 在响应顶层（`resp.usage`）、finish_reason 在 `choices[0]`、content 在 `choices[0].message`
+- 实测 deepseek：280 个 prompt token 里 256 个缓存命中（前缀缓存，历史全量重传有缓存兜底）；`prompt_cache_hit_tokens` 是 DeepSeek 私有字段——印证"厂商差异必须在 Model 层抹平"
+- 参数描述业界做法：载体统一是 JSON Schema 的 description 字段；生产方式 = docstring Args 解析（agno 用 docstring_parser，`tools/function.py:1028`）或 Pydantic `Field(description=...)`
+- 工具返回值：JSON 化塞 role=tool 消息；返回结构说明写 docstring Returns 段（随 description 每轮自动送达）；**输入要 schema（模型生成），输出不要（模型只读）**
 
 ---
 
 ## 明天从哪开始
 
-**模块 6 · 会话持久化**
-- 让 agent 跨多次 `run()` 记住对话（多轮会话）
-- 对应 agno 的 session/db 机制；mini-agno 先做内存版 Session store
-- 验收：同一个 Agent，run("我叫张三") 后 run("我叫什么") 能答对
+**模块 6 Step3 · 持久化（模块 6 下半场）**
+- 读 agno：`db/base.py:180-232`（get_session / upsert_session / delete_session）+ `db/sqlite/sqlite.py` 怎么建表——按需 grep，别通读
+- 实现：`BaseDb(ABC)`（get_session / upsert_session 两个抽象方法）+ `SqliteDb`（标准库 sqlite3，零依赖）+ Agent 挂 `db` 字段，run 前 load、run 后写回
+- **验收（灵魂）**：两个独立进程共享同一 db 文件，第一个 `run("我叫张三")`，第二个 `run("我叫什么")` 能答对——"重启还记得"才是持久化
+- 两个设计决策：什么时候写库（每条消息后 vs run 结束）？存整条 Session JSON 还是按消息存行？（先选简单的）
+- 穿插小待办：usage/finish_reason 接进 ModelResponse；给 Function 加 docstring Args 解析（笔记标了"待实践"）
 
 ## 环境备忘
 

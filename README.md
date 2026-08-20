@@ -44,10 +44,10 @@ mini-agno 会按这五层逐步搭建。
 | 0 | 全局架构 + 项目骨架 | `libs/agno/agno/` 顶层、`agent/agent.py`、`run/` | ✅ 完成 |
 | 1 | 核心数据模型（Message/Response） | `models/message.py`、`models/response.py` | ✅ 完成 |
 | 2 | Model 抽象（多厂商可插拔） | `models/base.py:130` | ✅ 完成 |
-| 3 | 工具系统（@tool/Function/FunctionCall） | `tools/decorator.py`、`tools/function.py` | 🔧 进行中（Function/FunctionCall 已完成，`@tool` 装饰器待补） |
-| 4 | **Agent 主循环**（里程碑 M1） | `agent/agent.py` 的 `run`、`run/` | 未开始 |
-| 5 | 结构化输出 | `agent.py` 的 `output_schema` | 未开始 |
-| 6 | 会话与持久化 | `db/base.py`、`db/schemas/` | 未开始 |
+| 3 | 工具系统（@tool/Function/FunctionCall） | `tools/decorator.py`、`tools/function.py` | ✅ 完成 |
+| 4 | **Agent 主循环**（里程碑 M1） | `agent/agent.py` 的 `run`、`run/` | ✅ 完成（M1 达成） |
+| 5 | 结构化输出 | `agent.py` 的 `output_schema` | ✅ 完成（含真模型接入） |
+| 6 | 会话与持久化 | `db/base.py`、`db/schemas/` | 🔧 进行中（会话完成，持久化未开始） |
 | 7 | 记忆系统（跨会话） | `memory/manager.py` | 未开始 |
 | 8 | RAG 知识库 | `knowledge/knowledge.py` | 未开始 |
 | 9 | 多智能体（Team） | `team/team.py`、`team/mode.py` | 未开始 |
@@ -62,5 +62,5 @@ mini-agno 会按这五层逐步搭建。
 
 ```bash
 uv sync          # 安装依赖（pydantic + pytest）
-uv run pytest    # 跑测试（当前 10 个测试全绿）
+uv run pytest    # 跑测试（当前 24 个测试全绿）
 ```
