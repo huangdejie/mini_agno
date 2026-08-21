@@ -237,20 +237,62 @@
 
 ---
 
+## 2026-08-20（Day 6，模块 6 Step3 收官）
+
+### 完成的事
+
+**模块 6 Step3 · 持久化层落地**
+- 新增 `mini_agno/db/base.py`：`BaseDb(ABC)`，两个抽象方法 `get_session(session_id)` / `upsert_session(session)`
+- 新增 `mini_agno/db/sqlite_db.py`：`SqliteDb(db_file)`，用标准库 `sqlite3` 建 session 表，整行 JSON 存一个 Session
+- `Agent` 加 `db: BaseDb | None = None`，走 cache-aside：内存 `sessions` 是缓存，db 是 source of truth；run 前 load，run 后 upsert
+- `Session` 加 `__post_init__` 防御：从 db 读回的 dict 列表自动还原成 `Message` 对象
+- 新增 `tests/test_persistence.py`：两个 Agent 实例共享同一 db 文件，第二个实例能读到第一个的对话历史
+- 新增 `examples/run_persist_demo.py`：**跨进程验收**——两次独立 python 进程跑同一脚本，第二次能接续第一次的历史
+- 更新 `docs/architecture.md`：架构图加入持久化层（db/base.py + db/sqlite_db.py）
+- 更新 `.gitignore`：忽略 `*.db` 和 `db/` 目录，避免运行产物污染仓库
+
+### 学到的关键点
+
+**持久化的验收标准**："两个 Agent 实例共享 db 文件能通"只是单进程验证；**跨进程重启还记得**才是持久化的真正分界线。`run_persist_demo.py` 跑两次验证了这个。
+
+**抽象的价值再次验证**：`Agent` 只依赖 `BaseDb` 抽象，不 import `SqliteDb`；换 Postgres 时只需新增一个 `PostgresDb` 子类，Agent 一行不改。这和 `Model(ABC)` 的可插拔是同一个设计思想。
+
+**事务边界**：每个 db 方法自己用 `with conn:` 包事务（成功 commit / 异常 rollback），和 agno 的 `with self.Session() as sess, sess.begin()` 同构。
+
+**存储粒度为什么选"整行 Session JSON"**：agno 也是一行一个 session。理由不是"数据量少"，而是读写模式——ReAct 每次要全量历史，没有分页/单条消息查询需求；session 还包含 agent 状态、summary 等会话级数据，本来就该一起存。
+
+**代码洁癖点**：
+- 别让具体实现（`SqliteDb`）漏进 `Agent`——通过 `db: BaseDb | None` 注入
+- `BaseDb` 只读/写，不创建 session；创建是 Agent 的应用层决策
+- JSON 反序列化必须还原成 `Message` 对象，不能传 dict 列表给主循环
+
+### 当前 mini-agno 状态
+- 25 个测试全绿（24 老 + 1 新持久化测试）
+- 模块 6 全部完成：会话（内存）+ 持久化（SQLite）
+- 已推送到 GitHub：`dc0cffc`
+
+---
+
 ## 明天从哪开始
 
-**模块 6 Step3 · 持久化（模块 6 下半场）**
-- 读 agno：`db/base.py:180-232`（get_session / upsert_session / delete_session）+ `db/sqlite/sqlite.py` 怎么建表——按需 grep，别通读
-- 实现：`BaseDb(ABC)`（get_session / upsert_session 两个抽象方法）+ `SqliteDb`（标准库 sqlite3，零依赖）+ Agent 挂 `db` 字段，run 前 load、run 后写回
-- **验收（灵魂）**：两个独立进程共享同一 db 文件，第一个 `run("我叫张三")`，第二个 `run("我叫什么")` 能答对——"重启还记得"才是持久化
-- 两个设计决策：什么时候写库（每条消息后 vs run 结束）？存整条 Session JSON 还是按消息存行？（先选简单的）
-- 穿插小待办：usage/finish_reason 接进 ModelResponse；给 Function 加 docstring Args 解析（笔记标了"待实践"）
+**模块 7 · 记忆系统（跨 session）**
+- 让同一个 `user_id` 在不同 `session_id` 之间共享持久事实
+- 读 agno：`memory/manager.py` + `db/schemas/memory.py`
+- 机制：run 前把记忆拼成 system 消息注入；run 后调模型从本轮对话提炼新 fact，存回 memory 表
+- 验收：`agent.run("我叫张三", session_id="s1", user_id="u1")` 后，`agent.run("我叫什么", session_id="s2", user_id="u1")` 能答对
+- 设计决策：memory 和 session 同库还是另开抽象？注入形式用 system 消息还是 user 消息？提炼时机（run 后立即 / 异步）？记忆上限/去重怎么控制？
+- 坑雷达：提炼记忆时如果也传 tools，可能触发二次工具调用——要限制提炼 prompt 明确"只输出事实"，或单独无 tools 调用
+
+### 待办（记着）
+- [ ]（可选升级）结构化输出改用 OpenAI 原生 `response_format`
+- [ ]（可选）usage / finish_reason 接进 ModelResponse
+- [ ]（可选）给 `Function` 加 docstring `Args:` 解析（笔记里标了"待实践"）
 
 ## 环境备忘
 
 ```bash
 cd /Users/huangdj/code/mine/mini-agno   # 进项目
-uv run pytest                            # 跑所有测试
+uv run pytest                            # 跑所有测试（当前 25 个全绿）
 uv run pytest tests/test_agent.py        # 跑单个文件
 uv run python -c "..."                   # 跑小段代码验证
 ```

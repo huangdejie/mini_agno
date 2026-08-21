@@ -47,8 +47,8 @@ mini-agno 会按这五层逐步搭建。
 | 3 | 工具系统（@tool/Function/FunctionCall） | `tools/decorator.py`、`tools/function.py` | ✅ 完成 |
 | 4 | **Agent 主循环**（里程碑 M1） | `agent/agent.py` 的 `run`、`run/` | ✅ 完成（M1 达成） |
 | 5 | 结构化输出 | `agent.py` 的 `output_schema` | ✅ 完成（含真模型接入） |
-| 6 | 会话与持久化 | `db/base.py`、`db/schemas/` | 🔧 进行中（会话完成，持久化未开始） |
-| 7 | 记忆系统（跨会话） | `memory/manager.py` | 未开始 |
+| 6 | 会话与持久化 | `db/base.py`、`db/schemas/` | ✅ 完成（模块 6 Step3：BaseDb + SqliteDb） |
+| 7 | 记忆系统（跨会话） | `memory/manager.py` | 🔧 进行中（⬅️ 下一个） |
 | 8 | RAG 知识库 | `knowledge/knowledge.py` | 未开始 |
 | 9 | 多智能体（Team） | `team/team.py`、`team/mode.py` | 未开始 |
 | 10 | 工作流（Workflow） | `workflow/step.py`、`workflow/types.py` | 未开始 |
