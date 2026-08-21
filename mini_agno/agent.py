@@ -1,7 +1,8 @@
 from dataclasses import dataclass, field
 from typing import Any
+from mini_agno.db.base import BaseDb
 from mini_agno.models.base import Model
-from mini_agno.models.message import Message, ModelResponse, ToolCall
+from mini_agno.models.message import Message, ToolCall
 from mini_agno.session import Session
 from mini_agno.tools.function import Function, FunctionCall
 import json
@@ -13,18 +14,35 @@ class Agent:
     tools: list[Function]
     max_iterations: int = 10
     output_schema: type | None = None  # 传Weather这种Pydantic类，不传就是自由文本
-    sessions: dict[str,Session] = field(default_factory=dict)
+    sessions: dict[str, Session] = field(default_factory=dict)
+    db: BaseDb | None = None
 
     def _find_tool_call(self, tool_call: ToolCall) -> Function:
         for tool in self.tools:
             if tool.name == tool_call.name:
                 return tool
         return None
-    
+
     def _get_or_create_session(self, session_id: str) -> Session:
-        if session_id not in self.sessions:
-            self.sessions[session_id] = Session(session_id=session_id)
-        return self.sessions[session_id]
+        """
+        如果db为空,则仅在内存中存储
+        """
+        if session_id in self.sessions:
+            return self.sessions[session_id]
+        if self.db is not None:
+            result = self.db.get_session(session_id)
+            if result is not None:
+                session = Session(**result)
+                self.sessions[session_id] = session
+                return session
+        session = Session(session_id=session_id, messages=[])
+        self.sessions[session_id] = session
+        return session
+
+    def _upsert_session(self, session: Session) -> None:
+        self.sessions[session.session_id] = session
+        if self.db is not None:
+            self.db.upsert_session(session)
 
     def run(self, user_message: str, session_id: str = "default") -> Any:
         iteration = 0
@@ -71,6 +89,7 @@ class Agent:
                         )
                     )
             else:
+                self._upsert_session(session)
                 # 如果有输出结构，则进行结构化输出
                 if self.output_schema is not None:
                     return self.output_schema.model_validate_json(resp.content)
