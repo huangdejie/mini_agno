@@ -273,26 +273,54 @@
 
 ---
 
-## 明天从哪开始
+## 2026-08-23（Day 7，模块 7 收官）
+
+### 完成的事
 
 **模块 7 · 记忆系统（跨 session）**
-- 让同一个 `user_id` 在不同 `session_id` 之间共享持久事实
-- 读 agno：`memory/manager.py` + `db/schemas/memory.py`
-- 机制：run 前把记忆拼成 system 消息注入；run 后调模型从本轮对话提炼新 fact，存回 memory 表
-- 验收：`agent.run("我叫张三", session_id="s1", user_id="u1")` 后，`agent.run("我叫什么", session_id="s2", user_id="u1")` 能答对
-- 设计决策：memory 和 session 同库还是另开抽象？注入形式用 system 消息还是 user 消息？提炼时机（run 后立即 / 异步）？记忆上限/去重怎么控制？
-- 坑雷达：提炼记忆时如果也传 tools，可能触发二次工具调用——要限制提炼 prompt 明确"只输出事实"，或单独无 tools 调用
+- 新增 `mini_agno/memory/manager.py`：`MemoryManager(db)`，封装 `get_memories(user_id)` / `add_memories(user_id, memories)`
+- 扩展 `mini_agno/db/base.py`：加 `get_memories` / `add_memory` 抽象方法
+- 扩展 `mini_agno/db/sqlite_db.py`：新增 `memory` 表（memory_id/user_id/memory/created_at），实现按 user_id 存取
+- `Agent` 加 `memory_manager: MemoryManager | None = None` 和 `run(..., user_id="default")` 参数
+- run 前注入：把该 user 的记忆拼成 system 消息塞 messages 最前面（只在 session 为空时注入，避免重复）
+- run 后提炼：把本轮 user/tool 消息传给模型，提取持久事实，去重后存入 memory 表
+- 新增 `tests/test_memory.py`：同一 user_id 跨 session 共享记忆，不同 user_id 隔离——26 个测试全绿
+- 新增 `examples/run_memory.py`：真模型手动验证脚本（不进 pytest）
+
+### 学到的关键点
+
+**Session 和 Memory 是两层记忆**：Session 是“短期记忆”（按 session_id，存对话原文）；Memory 是“长期记忆”（按 user_id，存提炼事实）。两者正交：Session 负责会话内上下文，Memory 负责跨会话用户画像。
+
+**注入位置**：把记忆拼成 `role="system"` 消息放在 messages 最前面，主模型自然把它当已知事实用。
+
+**提炼时机**：每次 `run()` 结束后提炼，素材是本轮的 user/tool 消息（不含 assistant 自己的话，避免把模型总结误当用户事实）。不是等整个 session 结束再提炼——否则中间 run 看不到新事实。
+
+**记忆爆炸的防御**：db 层做了两件事——
+- 去重：完全相同文本不重复插入
+- 上限：每个 user 最多保留 50 条，超过删最旧的
+语义相似度更新（agno 的做法）先不做，复杂度太高。
+
+**提炼时不要传 tools**：`_extract_facts` 调用模型时不传 `tools`，否则模型可能又去调工具。这是模块 7 最大的坑。
+
+### 当前 mini-agno 状态
+- 26 个测试全绿
+- 模块 7 完成：跨 session 记忆
+- 已具备：短期记忆（Session）+ 长期记忆（Memory）+ 持久化（SQLite）
+
+---
+
+## 明天从哪开始
+
+**模块 8 · RAG 知识库**
+- 让 agent 能查外部文档，回答文档内容相关问题
+- 读 agno：`knowledge/knowledge.py` + `vectordb/` 相关实现
+- 核心机制：文档切分 → embedding 向量化 → 向量检索（top-k）→ 检索结果塞进 prompt 当上下文
+- 验收：`agent.run("文档里怎么说 X？")` 能根据知识库内容回答
+- mini 版可以先不用真向量库，用内存 + 简单字符串匹配或 sklearn 余弦相似度模拟；真要向量库可选 `sqlite-vec` 或 `chromadb`
+- 设计决策：Knowledge 和 Memory 很像但归属不同——Memory 按 user_id（用户画像），Knowledge 按知识库名（公开文档），谁都能查
 
 ### 待办（记着）
 - [ ]（可选升级）结构化输出改用 OpenAI 原生 `response_format`
 - [ ]（可选）usage / finish_reason 接进 ModelResponse
 - [ ]（可选）给 `Function` 加 docstring `Args:` 解析（笔记里标了"待实践"）
-
-## 环境备忘
-
-```bash
-cd /Users/huangdj/code/mine/mini-agno   # 进项目
-uv run pytest                            # 跑所有测试（当前 25 个全绿）
-uv run pytest tests/test_agent.py        # 跑单个文件
-uv run python -c "..."                   # 跑小段代码验证
-```
+- [ ]（可选升级）Memory 语义相似度更新 / 按 topic 分类
