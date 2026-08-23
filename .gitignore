@@ -11,4 +11,4 @@ wheels/
 
 # SQLite databases
 *.db
-db/
+/db/                 # 只忽略项目根下的 db/（运行时默认路径），不忽略 mini_agno/db/ 源码
