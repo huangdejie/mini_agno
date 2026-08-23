@@ -25,7 +25,7 @@ class Agent:
                 return tool
         return None
 
-    def _get_or_create_session(self, session_id: str) -> Session:
+    def _get_or_create_session(self, session_id: str, user_id: str) -> Session:
         """
         如果db为空,则仅在内存中存储
         """
@@ -37,7 +37,7 @@ class Agent:
                 session = Session(**result)
                 self.sessions[session_id] = session
                 return session
-        session = Session(session_id=session_id, messages=[])
+        session = Session(session_id=session_id, user_id=user_id, messages=[])
         self.sessions[session_id] = session
         return session
 
@@ -51,7 +51,7 @@ class Agent:
     ) -> Any:
         iteration = 0
         user_msg = Message(role="user", content=user_message)
-        session = self._get_or_create_session(session_id)
+        session = self._get_or_create_session(session_id, user_id)
 
         # 如果存在记忆管理的话，则需要把记忆拼成system消息,只有第一次的时候参会加入进去
         if self.memory_manager is not None and not session.messages:
@@ -106,18 +106,21 @@ class Agent:
                 self._upsert_session(session)
                 # 这里如果将大模型的回答放入memory，一旦大模型错误的，可能会有错误，所以只筛选用户输入和工具调用的
                 if self.memory_manager is not None:
-                    facts = self._extract_facts([m for m in session.messages if m.role in ("user", "tool")],user_id)
-                    self.memory_manager.add_memories(user_id,facts)
+                    facts = self._extract_facts(
+                        [m for m in session.messages if m.role in ("user", "tool")],
+                        user_id,
+                    )
+                    self.memory_manager.add_memories(user_id, facts)
                 # 如果有输出结构，则进行结构化输出
                 if self.output_schema is not None:
                     return self.output_schema.model_validate_json(resp.content)
                 return resp.content
 
-    def _extract_facts(self,messages:list[Message],user_id:str) -> list[str]:
+    def _extract_facts(self, messages: list[Message], user_id: str) -> list[str]:
         prompt = """
         从以下对话中提取关于用户的持久事实(如姓名、偏好、背景等)。只返回事实列表，每行一条，不要调用工具，不要有多余解释。
         """
-        extract_messages = [Message(role="system",content=prompt)] + messages
+        extract_messages = [Message(role="system", content=prompt)] + messages
         # 这里让大模型自己去提炼，然后存入memory
-        resp = self.model.invoke(messages=extract_messages,tools=[])
+        resp = self.model.invoke(messages=extract_messages, tools=[])
         return [line.strip("- ") for line in resp.content.split("\n") if line.strip()]

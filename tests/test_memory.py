@@ -1,4 +1,3 @@
-
 from mini_agno.agent import Agent
 from mini_agno.db.sqlite_db import SqliteDb
 from mini_agno.memory.manager import MemoryManager
@@ -15,14 +14,14 @@ def test_memory(tmp_path):
     model = MockModel(
         id="memory_mock",
         response_list=[
-            ModelResponse(content="你好张三"),                # run 1 主循环
-            ModelResponse(content="用户叫张三"),               # run 1 提炼
+            ModelResponse(content="你好张三"),  # run 1 主循环
+            ModelResponse(content="用户叫张三"),  # run 1 提炼
             ModelResponse(content="JDK17 推荐用 java.time"),  # run 2 主循环
-            ModelResponse(content=""),                         # run 2 提炼（无新事实）
-            ModelResponse(content="你叫张三"),                 # run 3 主循环（读到记忆）
-            ModelResponse(content=""),                         # run 3 提炼（无新事实）
-            ModelResponse(content="我不知道你叫什么"),          # run 4 主循环（u2 无记忆）
-            ModelResponse(content=""),                         # run 4 提炼（无新事实）
+            ModelResponse(content=""),  # run 2 提炼（无新事实）
+            ModelResponse(content="你叫张三"),  # run 3 主循环（读到记忆）
+            ModelResponse(content=""),  # run 3 提炼（无新事实）
+            ModelResponse(content="我不知道你叫什么"),  # run 4 主循环（u2 无记忆）
+            ModelResponse(content=""),  # run 4 提炼（无新事实）
         ],
     )
     agent = Agent(model=model, tools=[], memory_manager=mm)

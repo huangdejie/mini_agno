@@ -29,19 +29,30 @@ def test_messages_default_not_shared():
     a1_s1 = uuid.uuid4().hex
     a2_s2 = uuid.uuid4().hex
     """两个 Agent 实例不能共享同一个 messages 列表"""
-    a1 = Agent(model=MockModel(id="m1", response_list=[ModelResponse(content="你好张三")]), tools=[])
-    a1.run("我叫张三",session_id=a1_s1)
-    a2 = Agent(model=MockModel(id="m2", response_list=[ModelResponse(content="你叫李四")]), tools=[])
-    a2.run("我叫什么",session_id=a2_s2)
+    a1 = Agent(
+        model=MockModel(id="m1", response_list=[ModelResponse(content="你好张三")]),
+        tools=[],
+    )
+    a1.run("我叫张三", session_id=a1_s1)
+    a2 = Agent(
+        model=MockModel(id="m2", response_list=[ModelResponse(content="你叫李四")]),
+        tools=[],
+    )
+    a2.run("我叫什么", session_id=a2_s2)
     print(a1.sessions[a1_s1].messages)
     assert a1.sessions[a1_s1].messages is not a2.sessions[a2_s2].messages
 
 
 def test_multi_session_isolated():
     """同一个 Agent 实例在不同会话之间是隔离的"""
-    mock = MockModel(id="mock", response_list=[ModelResponse(content="记住张三"),
-                                               ModelResponse(content="记住李四"),
-                                               ModelResponse(content="你叫张三")])
+    mock = MockModel(
+        id="mock",
+        response_list=[
+            ModelResponse(content="记住张三"),
+            ModelResponse(content="记住李四"),
+            ModelResponse(content="你叫张三"),
+        ],
+    )
 
     agent = Agent(model=mock, tools=[])
     s1 = uuid.uuid4().hex
