@@ -309,14 +309,53 @@
 
 ---
 
-## 明天从哪开始
+## 2026-08-28（Day 8，模块 8 收官）
+
+### 完成的事
 
 **模块 8 · RAG 知识库**
-- 让 agent 能查外部文档，回答文档内容相关问题
-- 读 agno：`knowledge/knowledge.py` + `vectordb/` 相关实现
-- 核心机制：文档切分 → embedding 向量化 → 向量检索（top-k）→ 检索结果塞进 prompt 当上下文
-- 验收：`agent.run("文档里怎么说 X？")` 能根据知识库内容回答
-- mini 版可以先不用真向量库，用内存 + 简单字符串匹配或 sklearn 余弦相似度模拟；真要向量库可选 `sqlite-vec` 或 `chromadb`
+- 新增 `mini_agno/knowledge/knowledge.py`：`Knowledge(documents)`，L1 简化版——字符串匹配 + 顺序兜底
+- `Agent` 加 `knowledge: Knowledge | None = None`，run 前用用户问题做 `knowledge.search()`，把检索结果拼成 system 消息注入
+- 注入逻辑和 Memory 一致：只在 session 为空时注入，避免同一 session 内重复
+- 新增 `tests/test_knowledge.py`：Knowledge 检索测试 + Agent 接入测试
+- 28 个测试全绿
+
+### 学到的关键点
+
+**RAG 的三层能力**：
+- L1（字符串匹配）：理解"文档 → 检索 → 塞进 prompt → 回答"闭环
+- L2（TF-IDF/余弦相似度）：理解"语义相近"的检索
+- L3（embedding + 向量库）：生产级实现
+
+**RAG 和 Memory 的异同**：
+- 相同点：都是给模型塞上下文
+- 不同点：Memory 按 user_id 全量注入（条数少），Knowledge 按 query 检索注入（文档大）
+
+**Knowledge 注入位置**：放在 messages 最前面的 system 消息里，和 Memory 注入方式一致。
+
+**L1 的局限**：只能匹配 query 字面出现的文档，无法理解同义词。比如问"年假"能匹配"年假"，但问"每年能休几天"就匹配不到。
+
+### 当前 mini-agno 状态
+- 28 个测试全绿
+- 模块 8 完成：L1 RAG
+
+---
+
+## 明天从哪开始
+
+**模块 9 · 多智能体（Team）**
+- 让多个 Agent 分工协作完成一个任务
+- 读 agno：`team/team.py` + `team/mode.py`
+- 核心模式：Sequential（顺序）/ Router（路由）/ Parallel（并行）
+- 验收：两个 agent（一个总结、一个润色）串起来处理输入
+- mini 版先实现 Sequential 模式，Team 持有一个 `list[Agent]`，按顺序调用并把前一个输出传给后一个
+
+### 待办（记着）
+- [ ] RAG L2/L3 升级（TF-IDF → embedding + 向量库）
+- [ ]（可选升级）结构化输出改用 OpenAI 原生 `response_format`
+- [ ]（可选）usage / finish_reason 接进 ModelResponse
+- [ ]（可选）给 `Function` 加 docstring `Args:` 解析（笔记里标了"待实践"）
+- [ ]（可选升级）Memory 语义相似度更新 / 按 topic 分类
 - 设计决策：Knowledge 和 Memory 很像但归属不同——Memory 按 user_id（用户画像），Knowledge 按知识库名（公开文档），谁都能查
 
 ### 待办（记着）

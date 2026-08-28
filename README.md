@@ -49,8 +49,8 @@ mini-agno 会按这五层逐步搭建。
 | 5 | 结构化输出 | `agent.py` 的 `output_schema` | ✅ 完成（含真模型接入） |
 | 6 | 会话与持久化 | `db/base.py`、`db/schemas/` | ✅ 完成（模块 6 Step3：BaseDb + SqliteDb） |
 | 7 | 记忆系统（跨会话） | `memory/manager.py` | ✅ 完成（MemoryManager + SQLite memory 表） |
-| 8 | RAG 知识库 | `knowledge/knowledge.py` | 🔧 进行中（⬅️ 下一个） |
-| 9 | 多智能体（Team） | `team/team.py`、`team/mode.py` | 未开始 |
+| 8 | RAG 知识库 | `knowledge/knowledge.py` | ✅ 完成（L1 字符串匹配版 Knowledge） |
+| 9 | 多智能体（Team） | `team/team.py`、`team/mode.py` | 🔧 进行中（⬅️ 下一个） |
 | 10 | 工作流（Workflow） | `workflow/step.py`、`workflow/types.py` | 未开始 |
 | 11 | 运行时 API 化（里程碑 M4） | `os/`（FastAPI + SSE） | 未开始 |
 

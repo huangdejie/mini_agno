@@ -1,6 +1,9 @@
 from dataclasses import dataclass, field
+from multiprocessing import set_forkserver_preload
 from typing import Any
+from mini_agno import knowledge
 from mini_agno.db.base import BaseDb
+from mini_agno.knowledge.knowledge import Knowledge
 from mini_agno.memory.manager import MemoryManager
 from mini_agno.models.base import Model
 from mini_agno.models.message import Message, ToolCall
@@ -18,6 +21,7 @@ class Agent:
     sessions: dict[str, Session] = field(default_factory=dict)
     db: BaseDb | None = None
     memory_manager: MemoryManager | None = None
+    knowledge: Knowledge | None = None
 
     def _find_tool_call(self, tool_call: ToolCall) -> Function:
         for tool in self.tools:
@@ -52,6 +56,13 @@ class Agent:
         iteration = 0
         user_msg = Message(role="user", content=user_message)
         session = self._get_or_create_session(session_id, user_id)
+
+        if self.knowledge is not None:
+            docs = self.knowledge.search(user_message)
+            if docs:
+                knowledge_msg = Message(role="system", content="请参考以下文档回答问题：\n" + "\n".join(f"- {d}" for d in docs))   
+                session.messages.append(knowledge_msg)
+
 
         # 如果存在记忆管理的话，则需要把记忆拼成system消息,只有第一次的时候参会加入进去
         if self.memory_manager is not None and not session.messages:
