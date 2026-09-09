@@ -27,8 +27,7 @@
 | 7 | 记忆系统 | ✅ 完成 | 2026-08-23 |
 | 8 | RAG 知识库 | ✅ 完成 | 2026-08-28 |
 | 9 | 多智能体（Team） | ✅ 完成 | 2026-09-09 |
-| 9 | 多智能体（Team） | 未开始 | — |
-| 10 | 工作流（Workflow） | 未开始 | — |
+| 10 | 工作流（Workflow） | ✅ 完成 | 2026-09-09 |
 | 11 | 运行时 API 化（里程碑 M4） | 未开始 | — |
 
 ---
@@ -381,15 +380,59 @@
 
 ---
 
-## 明天从哪开始
+## 2026-09-09（Day 7 续，模块 10 收官）
+
+### 完成的事
 
 **模块 10 · 工作流（Workflow）**
-- 读 agno：`workflow/` 目录
-- Workflow vs Team 的区别：Team 是"LLM 自主编排"（coordinate），Workflow 是"代码写死的确定性流程"
-- 核心概念：Step（步骤）/ 条件分支 / 循环 / 输入输出在步骤间流转
-- 验收：把"总结→润色"做成一个确定性 Workflow（和 coordinate 对比：一个是代码定流程，一个是 LLM 定流程）
+- 新增 `mini_agno/workflow/`：`step.py`（Step）+ `workflow.py`（Workflow 顺序管道）+ `condition.py`（Condition 条件分支）
+- `Step`：统一包装两种执行者——`agent: Agent | None` 或 `func: Callable | None`，`__post_init__` 校验互斥（都传/都不传报错），name 缺省取 `func.__name__` 或 `agent.name`
+- `Workflow(steps).run(input)`：朴素 for 循环，`current = step.run(current)` 数据下流——和 sequential Team 同构（故意的）
+- `Condition(Step)`：**继承 Step** 实现组合模式；`run()` 里算 condition → 走 then/else 分支 → 分支内数据同样下流 → 返回末步输出；空分支 = input 原样透传
+- 测试方法论三连改：补 assert（之前纯 print 永远过）/ MockModel 替真模型（离线可复现）/ 60 行新闻挪成模块级常量 `NEWS_TEXT`
+- then/else 两条分支都有精确断言；33 个测试全绿
+
+### 学到的关键点
+
+**Workflow vs Team 的本质**：Team 是"LLM 现场决定怎么协作"（自主编排，流程运行期产生）；Workflow 是"开发者提前写死流程"（确定性编排，流程声明期固定）。Java 类比：Workflow ≈ Spring Batch/Camunda BPMN（声明步骤图，引擎照图执行）；Team ≈ 给项目经理配团队（说目标，他自己派活）。**之前做的 sequential Team 其实是 Workflow 的活**——agno 里顺序链（`Steps`）归 Workflow 管，Team 管自主协作，A2 并存的对照组现在兑现了。
+
+**agno Workflow 是小型流程编排 DSL**：`Steps`（顺序）/ `Parallel`（并行）/ `Condition`（if）/ `Router`（switch）/ `Loop`（循环）+ `Step` 可包 Agent/Team/普通函数/**嵌套 Workflow**（`step.py:181-190` 四个 Optional 字段）。确定性骨架 + 局部自主（某步嵌 Team）是生产常见形态。
+
+**组合模式：Condition 也是 Step**。Condition 继承 Step、实现同样的 `run(input) -> str`，所以能直接进 `Workflow.steps` 列表，**Workflow 主循环一行不用改**。分支内部再走一遍"数据下流" for 循环，和主循环同构。选择路由的 `condition` 是普通 Python 函数（确定性判断），不是 LLM——LLM 判断路由是 Team Router 的活，这是两者的分界。
+
+**@override 装饰器**（Python 3.12 `typing.override`）：≈ Java `@Override`，mypy 能查覆写错误。
+
+**覆盖 `__post_init__` = 全盘接管初始化**：Condition 裸 `pass` 覆盖 Step 的 `__post_init__` 后，父类的 name 缺省逻辑也没了（所以 Condition 必须显式传 name）——不是"只跳过互斥校验"。后来补了自己的三字段校验。
+
+### 坑 & 易错点
+
+- **纯 print 没断言 = 假测试**：`test_seq_workflow` 第一版只 `print(resp)`，永远通过。改实现时这种测试不会红。
+- **弱断言的漏洞**：`assert "燃油" in resp`——如果 Workflow 丢了 step2 只返回原文新闻，里面也有"燃油"，照样绿。**精确相等才能钉死"最终输出=最后一步输出"**。期望值要写"应该是什么"的又一变体。
+- **条件分支要两条路都测**：只测 then 路径，走错分支不红。else 路径补了第二段 run + 精确断言。
+- **真模型别进 pytest**：没 key 就挂、花钱、慢、不可复现。pytest 用 MockModel，真模型放 `examples/` 手动跑（沿用 test_memory 的约定）。
+- **测试数据内联 60 行把逻辑淹没**：挪成模块级常量；多测试共用再升级 pytest fixture（`@pytest.fixture` ≈ 依赖注入，按参数名匹配注入）。
+
+### 当前 mini-agno 状态
+- 33 个测试全绿
+- 模块 10 完成：Step + Workflow（顺序管道）+ Condition（条件分支）
+- 已具备：单 Agent + 多 Agent（Team）+ 确定性流程编排（Workflow）——三个执行抽象齐了
+
+---
+
+## 明天从哪开始
+
+**模块 11 · 运行时 API 化（里程碑 M4，最后一个模块）**
+- 把 mini-agno 包成 HTTP 服务（FastAPI），Agent/Team/Workflow 能被远程调用
+- 读 agno：`playground/` / fastapi 集成相关
+- 核心概念：REST 端点设计（/runs）/ 请求响应模型 / agent 注册 / 会话通过 session_id 继续对话
+- 验收：curl 起 agent 对话，多轮 session 保持
+- Java 类比：终于到 Spring Boot 的 Controller 层了——前 10 个模块是 Service/Repository
 
 ### 待办（记着）
+- [ ] （模块10遗留）`examples/run_workflow.py` 真模型版没跑
+- [ ] （模块10遗留）then/else 拆成两个测试函数（一个测试一个行为）
+- [ ] Loop / Parallel / Router 三个控制流原语（agno 有，mini 版没做）
+- [ ] Step 支持 team / 嵌套 workflow 执行者
 - [ ] coordinate 进阶：`route` / `broadcast` / `tasks` 三种模式
 - [ ] description vs instructions 职责：把 run_team.py 里 analysis_agent 的长 description 拆成"短 description + 长 instructions"
 - [ ] RAG L2/L3 升级（TF-IDF → embedding + 向量库）
