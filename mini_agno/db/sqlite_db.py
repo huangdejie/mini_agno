@@ -18,10 +18,14 @@ class SqliteDb(BaseDb):
         conn = sqlite3.connect(self.db_file)
         cursor = conn.cursor()
         with conn:
-            cursor.execute("""CREATE TABLE IF NOT EXISTS session
-                         (session_id TEXT PRIMARY KEY,user_id TEXT NOT NULL, messages TEXT)""")
-            cursor.execute("""CREATE TABLE IF NOT EXISTS memory
-                         (memory_id TEXT PRIMARY KEY,user_id TEXT NOT NULL, memory TEXT,created_at INTEGER)""")
+            cursor.execute(
+                """CREATE TABLE IF NOT EXISTS session
+                         (session_id TEXT PRIMARY KEY,user_id TEXT NOT NULL, messages TEXT)"""
+            )
+            cursor.execute(
+                """CREATE TABLE IF NOT EXISTS memory
+                         (memory_id TEXT PRIMARY KEY,user_id TEXT NOT NULL, memory TEXT,created_at INTEGER)"""
+            )
         conn.close()
 
     def get_session(self, session_id: str) -> dict:
@@ -38,8 +42,14 @@ class SqliteDb(BaseDb):
                 return None
 
             db_session_id, user_id, messages_json_str = result
-            messages = [Message.model_validate(m) for m in json.loads(messages_json_str)]
-            return {"session_id": db_session_id, "user_id": user_id, "messages": messages}  
+            messages = [
+                Message.model_validate(m) for m in json.loads(messages_json_str)
+            ]
+            return {
+                "session_id": db_session_id,
+                "user_id": user_id,
+                "messages": messages,
+            }
 
         finally:
             conn.close()
@@ -52,13 +62,13 @@ class SqliteDb(BaseDb):
 
             cursor.execute(
                 "INSERT OR REPLACE INTO session (session_id,user_id, messages) VALUES (?,?, ?)",
-                (session.session_id,session.user_id, json.dumps(messages_as_dicts)),
+                (session.session_id, session.user_id, json.dumps(messages_as_dicts)),
             )
             conn.commit()
         finally:
             conn.close()
 
-    def get_memories(self,user_id:str)->list[str]:
+    def get_memories(self, user_id: str) -> list[str]:
         conn = sqlite3.connect(self.db_file)
         cursor = conn.cursor()
         try:
@@ -71,7 +81,7 @@ class SqliteDb(BaseDb):
         finally:
             conn.close()
 
-    def add_memory(self,user_id:str,memory:str)->None:
+    def add_memory(self, user_id: str, memory: str) -> None:
         conn = sqlite3.connect(self.db_file)
         cursor = conn.cursor()
         try:
@@ -84,9 +94,11 @@ class SqliteDb(BaseDb):
             if result is None:
                 cursor.execute(
                     "INSERT INTO memory (memory_id, user_id, memory,created_at) VALUES (?,?, ?, ?)",
-                    (uuid4().hex, user_id, memory, int(time.time()*1000)),
+                    (uuid4().hex, user_id, memory, int(time.time() * 1000)),
                 )
-                cursor.execute("SELECT COUNT(*) FROM memory WHERE user_id = ?", (user_id,))
+                cursor.execute(
+                    "SELECT COUNT(*) FROM memory WHERE user_id = ?", (user_id,)
+                )
                 count = cursor.fetchone()[0]
                 cursor.execute(
                     """
@@ -94,7 +106,7 @@ class SqliteDb(BaseDb):
                         SELECT rowid FROM memory WHERE user_id = ? ORDER BY created_at ASC LIMIT ?
                     )
                     """,
-                    (user_id, max(0,count-50)),
+                    (user_id, max(0, count - 50)),
                 )
                 conn.commit()
         finally:

@@ -13,8 +13,10 @@ class Function:
     parameters: Optional[dict] = None
 
     def __post_init__(self):
-        self.name = self.entrypoint.__name__
-        self.description = self.entrypoint.__doc__ or ""
+        if not self.name:
+            self.name = self.entrypoint.__name__
+        if not self.description:
+            self.description = self.entrypoint.__doc__ or ""
         type_hints = get_type_hints(self.entrypoint)
         properties = {
             k: {"type": type_map.get(v, "string")}

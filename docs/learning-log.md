@@ -23,9 +23,10 @@
 | 3 | 工具系统（Function/FunctionCall） | ✅ 完成 | 2026-08-06 |
 | 4 | **Agent 主循环**（里程碑 M1）🎯 | ✅ 完成 | 2026-08-06 |
 | 5 | 结构化输出 | ✅ 完成 | 2026-08-14 |
-| 6 | 会话与持久化 | 🔧 进行中（⬅️ 下一个：Step3 持久化） | 2026-08-14 |
-| 7 | 记忆系统 | 未开始 | — |
-| 8 | RAG 知识库 | 未开始 | — |
+| 6 | 会话与持久化 | ✅ 完成 | 2026-08-20 |
+| 7 | 记忆系统 | ✅ 完成 | 2026-08-23 |
+| 8 | RAG 知识库 | ✅ 完成 | 2026-08-28 |
+| 9 | 多智能体（Team） | ✅ 完成 | 2026-09-09 |
 | 9 | 多智能体（Team） | 未开始 | — |
 | 10 | 工作流（Workflow） | 未开始 | — |
 | 11 | 运行时 API 化（里程碑 M4） | 未开始 | — |
@@ -341,25 +342,59 @@
 
 ---
 
-## 明天从哪开始
+## 2026-09-09（Day 7，模块 9 收官）
+
+### 完成的事
 
 **模块 9 · 多智能体（Team）**
-- 让多个 Agent 分工协作完成一个任务
-- 读 agno：`team/team.py` + `team/mode.py`
-- 核心模式：Sequential（顺序）/ Router（路由）/ Parallel（并行）
-- 验收：两个 agent（一个总结、一个润色）串起来处理输入
-- mini 版先实现 Sequential 模式，Team 持有一个 `list[Agent]`，按顺序调用并把前一个输出传给后一个
+- `Agent` 加 `name` + `description` + `instructions` 三个字段（都可选，不破坏现有调用处）
+- `Function.__post_init__` 从"无条件覆盖"改成"**没显式传才自动提取**"——支持手动指定 name/description
+- `team.py` 支持两种模式并存：
+  - `sequential`（之前已有）：代码写死 A→B→C 顺序链
+  - `coordinate`（新增）：Team 在 `__post_init__` 里现造一个 Leader Agent，把"调用下属"做成 Leader 手里的 `delegate_task_to_member(member_id, task)` 工具
+- `_validate_coordinate` 校验：leader_model 非空、成员都有 name+description、name 不重名
+- `_build_leader_instructions`：把成员的 name+description 拼进 Leader 的 system prompt
+- `leader: Agent = field(init=False)`，coordinate 时才造
+- 真模型端到端验收 `examples/run_team.py`：temperatureAgent（带 query_temperature 工具）+ analysisAgent，Leader 自主派活
+- 修了两个过期测试断言（见下坑点），31 个测试全绿
+
+### 学到的关键点
+
+**agno 的 TeamMode 是四种，且没有"顺序链"**：`coordinate`（默认，主管派活）/ `route`（路由直通）/ `broadcast`（同一任务群发）/ `tasks`（任务清单驱动）。我一开始凭印象说的 Sequential/Router/Parallel 是通用编排概念，不是 agno 的实现——**agno 的 Team 全是"Leader-下属"结构，顺序不是写死的链，是 Leader 现场决定的**。mini 版先做的 sequential 在 agno 里根本没有对应模式。
+
+**coordinate 的本质：Team 不干活，只是造了个 Leader Agent**。Leader 是普通 Agent，跑标准 ReAct 循环；Team 唯一做的是给它塞一件 `delegate_task_to_member` 工具 + 一段列出下属的 system prompt。**Agent 调工具 → 工具里又是一个 Agent.run()——这就是"递归 Agent"**。编排逻辑由 Leader 的 LLM 决定，不是代码。
+
+**下属间上下文全靠 Leader 传话（最关键认知）**：每个下属是独立 Agent、独立 session，互相看不到对话。`delegate_task_to_member` 返回字符串到 Leader 的 messages，Leader 第二次派活时必须**把上一个人的结果写进 task 参数**里（如"温度是45.5度，请分析"）。这和 sequential（数据自动流向下一个）是本质区别。真模型验收时 Leader 做到了——分析建议基于真实查到的温度，说明上下文传递真的发生了。
+
+**description 是给 Leader 看的"岗位职责"**：Leader 派活的唯一依据就是 system prompt 里的成员名单（name+description）。没有 description，Leader 只能靠名字瞎猜。职责要分清：description = "这个成员擅长什么"（一句话，进 Leader prompt）；具体业务规则该放成员自己的 instructions，别塞 description（否则 Leader prompt 又臭又长，且 Leader 可能自己去执行规则而不是派活）。
+
+### 坑 & 易错点
+
+- **`'Function' object is not iterable`**：`Agent.tools` 声明是 `list[Function]`，但 Python dataclass **运行时不强制类型检查**——误传单个 `Function` 也照收，直到 `for t in self.tools` 才爆。错误延迟到使用点才出现，不在创建点。**Java 是编译期挡住，Python 是运行期才炸**，类型注解只是提示不挡错。
+- **测试断言过期**：改完 `__post_init__` 校验顺序和报错文案后，旧测试还断言"Only sequential mode is supported for now"。**改实现要同步改测试**。
+- **`try/except` 写测试是假阳性**：没抛异常会静默通过。该用 `pytest.raises(ValueError, match="...")`——`match` 是正则子串匹配，比 `str(e) == "..."` 抗文案微调，且不抛异常会明确失败。
+
+### 当前 mini-agno 状态
+- 31 个测试全绿
+- 模块 9 完成：sequential + coordinate 两种模式
+- 已具备：单 Agent 全部能力 + 多 Agent 协作（顺序链 + Leader 委派）
+
+---
+
+## 明天从哪开始
+
+**模块 10 · 工作流（Workflow）**
+- 读 agno：`workflow/` 目录
+- Workflow vs Team 的区别：Team 是"LLM 自主编排"（coordinate），Workflow 是"代码写死的确定性流程"
+- 核心概念：Step（步骤）/ 条件分支 / 循环 / 输入输出在步骤间流转
+- 验收：把"总结→润色"做成一个确定性 Workflow（和 coordinate 对比：一个是代码定流程，一个是 LLM 定流程）
 
 ### 待办（记着）
+- [ ] coordinate 进阶：`route` / `broadcast` / `tasks` 三种模式
+- [ ] description vs instructions 职责：把 run_team.py 里 analysis_agent 的长 description 拆成"短 description + 长 instructions"
 - [ ] RAG L2/L3 升级（TF-IDF → embedding + 向量库）
 - [ ]（可选升级）结构化输出改用 OpenAI 原生 `response_format`
 - [ ]（可选）usage / finish_reason 接进 ModelResponse
 - [ ]（可选）给 `Function` 加 docstring `Args:` 解析（笔记里标了"待实践"）
 - [ ]（可选升级）Memory 语义相似度更新 / 按 topic 分类
 - 设计决策：Knowledge 和 Memory 很像但归属不同——Memory 按 user_id（用户画像），Knowledge 按知识库名（公开文档），谁都能查
-
-### 待办（记着）
-- [ ]（可选升级）结构化输出改用 OpenAI 原生 `response_format`
-- [ ]（可选）usage / finish_reason 接进 ModelResponse
-- [ ]（可选）给 `Function` 加 docstring `Args:` 解析（笔记里标了"待实践"）
-- [ ]（可选升级）Memory 语义相似度更新 / 按 topic 分类
