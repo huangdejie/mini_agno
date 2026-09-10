@@ -14,3 +14,9 @@ class Model(ABC):
     ) -> ModelResponse:
         """Invoke the model with a list of messages."""
         pass
+
+    async def ainvoke(
+        self, messages: list[Message], tools: list[dict] | None = None
+    ) -> ModelResponse:
+        """Invoke the model with a list of messages."""
+        pass

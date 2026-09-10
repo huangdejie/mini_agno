@@ -2,7 +2,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 import json
-from openai import OpenAI
+from openai import AsyncOpenAI, OpenAI
 from os import getenv
 from mini_agno.models.base import Model
 from mini_agno.models.message import Message, ModelResponse, ToolCall
@@ -15,6 +15,7 @@ class OpenAIModel(Model):
     ):
         super().__init__(id)
         self.client = OpenAI(base_url=base_url, api_key=getenv("DEEPSEEK_API_KEY"))
+        self.aclient= AsyncOpenAI(base_url=base_url, api_key=getenv("DEEPSEEK_API_KEY"))
 
     # 将消息转换为openai认可的dict
     def _message_to_openai_dict(self, msg: Message) -> dict:
@@ -42,13 +43,19 @@ class OpenAIModel(Model):
         self, messages: list[Message], tools: list[dict] | None = None
     ) -> ModelResponse:
         """Invoke the model with a list of messages."""
-        # 翻入：你的 Message 列表 → OpenAI 认的 dict 列表
+        # 调用客户端
+        resp = self.client.chat.completions.create(**self._build_openai_messages(messages, tools))
+        return self._parse_response(resp)
+    
+    def _build_openai_messages(self, messages: list[Message], tools: list[dict] | None = None) -> list[dict]:
+        """翻入：你的 Message 列表 → OpenAI 认的 dict 列表"""
         openai_msgs = [self._message_to_openai_dict(msg) for msg in messages]
         kwargs = {"model": self.id, "messages": openai_msgs}
         if tools is not None:
             kwargs["tools"] = tools
-        # 调用客户端
-        resp = self.client.chat.completions.create(**kwargs)
+        return kwargs
+    
+    def _parse_response(self, resp: dict) -> ModelResponse:
         choice = resp.choices[0].message
         tool_calls = []
         if choice.tool_calls is not None:
@@ -60,3 +67,9 @@ class OpenAIModel(Model):
                 )
                 tool_calls.append(tool_call)
         return ModelResponse(content=choice.content, tool_calls=tool_calls)
+
+    async def ainvoke(
+        self, messages: list[Message], tools: list[dict] | None = None
+    ) -> ModelResponse:
+        resp = await self.aclient.chat.completions.create(**self._build_openai_messages(messages, tools))
+        return self._parse_response(resp)
