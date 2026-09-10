@@ -28,7 +28,7 @@
 | 8 | RAG 知识库 | ✅ 完成 | 2026-08-28 |
 | 9 | 多智能体（Team） | ✅ 完成 | 2026-09-09 |
 | 10 | 工作流（Workflow） | ✅ 完成 | 2026-09-09 |
-| 11 | 运行时 API 化（里程碑 M4） | 未开始 | — |
+| 11 | 运行时 API 化（里程碑 M4） | ✅ 完成 | 2026-09-10 |
 
 ---
 
@@ -419,16 +419,45 @@
 
 ---
 
-## 明天从哪开始
+## 2026-09-10（Day 8，模块 11 收官 · M4 达成 🎉）
 
-**模块 11 · 运行时 API 化（里程碑 M4，最后一个模块）**
-- 把 mini-agno 包成 HTTP 服务（FastAPI），Agent/Team/Workflow 能被远程调用
-- 读 agno：`playground/` / fastapi 集成相关
-- 核心概念：REST 端点设计（/runs）/ 请求响应模型 / agent 注册 / 会话通过 session_id 继续对话
-- 验收：curl 起 agent 对话，多轮 session 保持
-- Java 类比：终于到 Spring Boot 的 Controller 层了——前 10 个模块是 Service/Repository
+### 完成的事
+
+**模块 11 · 运行时 API 化（里程碑 M4，12 模块计划收官）**
+- 新增 `mini_agno/api.py`（17 行）：Pydantic DTO（RunRequest/RunResponse）+ 模块级 Agent 单例 + `POST /chat` 端点
+- 依赖：fastapi + uvicorn + pytest-httpx
+- curl 端到端验收通过：uvicorn 起服务，同 session 两问记住"张三"，换 session 隔离，缺字段 body 自动 422
+- 离线 TestClient 测试决定不补（记待办）
+
+### 学到的关键点
+
+**库 vs 服务**：前 10 个模块造的是 library（import 后进程内调用），模块 11 变成 service（网络远程调用）。Agent 主循环一行不改，写的只是**协议边界**：HTTP JSON 进 → 调 Agent → JSON 出。Java 类比：api.py = @RestController + DTO，uvicorn = 内嵌 Tomcat（ASGI），FastAPI 路由装饰器 = @PostMapping。
+
+**Agent 模块级单例是铁律**：agent 在模块加载时创建一次、所有请求复用。每个请求 new 一个 = 每次重建会话缓存，状态和性能全乱——这就是 agno CLAUDE.md "Never create agents in loops / 复用 agent" 规矩的由来，这次亲手写服务层才真正理解。
+
+**HTTP 无状态，会话连续性全靠 session_id 穿针引线**：每个请求互相独立，"记得你"不是 HTTP 的能力，是请求体里带着 session_id、服务端用它找回 Session（模块 6 的伏笔在 API 层兑现）。session_id 就是 correlationId。
+
+**Pydantic = 白送的 Bean Validation**：一行校验代码没写，缺 message 字段的 body 自动 422 + 错误详情。DTO 定义即校验规则。
+
+**agno 的服务化层叫 AgentOS**（`agno.os`）：把 FastAPI 包了一层，agent/team/workflow 挂上去自动获得 /agents /teams /workflows 目录 + run 端点 + /config 发现文档。mini 版裸写 FastAPI 学的是同一机制。
+
+### 当前 mini-agno 状态
+- 33 个测试全绿（api 层无测试）
+- **模块 11 完成，M4 达成——12 模块造轮子计划全部完成** 🎉
+- mini-agno 全貌：数据模型 → Model 抽象 → 工具 → ReAct 主循环 → 结构化输出 → Session/持久化 → Memory → RAG(L1) → Team(sequential+coordinate) → Workflow(Step+Condition) → HTTP API
+
+---
+
+## 毕业后方向（12 模块计划外，按建议优先级）
+
+1. **流式输出 + async（首推）**：mini-agno 唯一的结构性短板——所有 run() 都阻塞到整段生成完；token 本来就是流式产出的，打字机效果/取消/并发都建立在这个认知上。也补上"所有公共方法要有 async 变体"的欠债。MCP client、向量库查询都是 async 的，这是后续一切的地基
+2. **MCP 协议**：工具生态的 USB-C，接外部工具服务器，工具不用全自己写
+3. **RAG L2/L3**：TF-IDF → embedding + 向量库（pgvector），从字符串匹配到语义检索的质变
+4. **eval（怎么测 LLM 应用）**：agent_as_judge——传统单测断言对不上非确定性输出，这是 LLM 工程师的分水岭
+5. agno 仓库没碰过的地图：guardrails/（PII 脱敏、prompt 注入防护）、reasoning/（思考模型）、approval/（HITL 人审）、scheduler/ + job_queue/（定时/异步）
 
 ### 待办（记着）
+- [ ] api 层 TestClient 离线测试（本轮跳过，api 改动时补）
 - [ ] （模块10遗留）`examples/run_workflow.py` 真模型版没跑
 - [ ] （模块10遗留）then/else 拆成两个测试函数（一个测试一个行为）
 - [ ] Loop / Parallel / Router 三个控制流原语（agno 有，mini 版没做）
