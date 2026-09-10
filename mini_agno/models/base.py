@@ -15,8 +15,9 @@ class Model(ABC):
         """Invoke the model with a list of messages."""
         pass
 
+    @abstractmethod
     async def ainvoke(
         self, messages: list[Message], tools: list[dict] | None = None
     ) -> ModelResponse:
-        """Invoke the model with a list of messages."""
+        """Invoke the model asynchronously with a list of messages."""
         pass

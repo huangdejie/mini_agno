@@ -30,3 +30,9 @@ class MockModel(Model):
         resp = self._next()
         logging.debug(f"模型{self.id}返回:{resp}")
         return resp
+
+    async def ainvoke(
+        self, messages: list[Message], tools: list[dict] | None = None
+    ) -> ModelResponse:
+        """异步版 mock 不分同步异步，直接复用 invoke 的剧本逻辑。"""
+        return self.invoke(messages, tools)
