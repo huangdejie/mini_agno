@@ -1,3 +1,6 @@
+import asyncio
+from mini_agno.models.message import Message, ModelResponse, ToolCall
+from mini_agno.models.mock import MockModel
 from mini_agno.models.stream import ToolCallAccumulator
 
 
@@ -52,3 +55,24 @@ def test_accumulator_no_arg_tool():   # 无参工具：arguments 全程空串 ->
     assert len(calls) == 1
     assert calls[0].name == "get_current_time"
     assert calls[0].arguments == {}
+
+def test_mock_stream():
+    async def collect():
+        model = MockModel(id="m",response_list=[
+            ModelResponse(content="今天天气不错适合出门"),
+            ModelResponse(tool_calls=[ToolCall(id="c1",name="query",arguments={"city":"北京"})])
+        ])
+        out = []
+        async for r in model.ainvoke_stream(messages=[Message(role="user",content="今天天气怎么样")]):
+            out.append(r)
+        async for r in model.ainvoke_stream(messages=[Message(role="user", content="今天天气怎么样")]):
+            out.append(r)
+        return out
+    out = asyncio.run(collect())
+    print(out)
+    assert "".join(r.content for r in out if r.content) == "今天天气不错适合出门"
+    tool_calls = [r.tool_calls for r in out if r.tool_calls]
+    print(tool_calls[0])
+    assert len(tool_calls) == 1
+    calls = tool_calls[0]
+    assert calls[0].arguments =={'city':'北京'}

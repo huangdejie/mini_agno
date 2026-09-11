@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+from collections.abc import AsyncIterator
 from dataclasses import dataclass
 
 from mini_agno.models.message import Message, ModelResponse
@@ -20,4 +21,12 @@ class Model(ABC):
         self, messages: list[Message], tools: list[dict] | None = None
     ) -> ModelResponse:
         """Invoke the model asynchronously with a list of messages."""
+        pass
+
+    @abstractmethod
+    def ainvoke_stream(
+        self, messages: list[Message], tools: list[dict] | None = None
+    ) -> AsyncIterator[ModelResponse]:
+        """Stream the model response: yields content fragments as they arrive,
+        then one final ModelResponse carrying fully-assembled tool_calls (if any)."""
         pass

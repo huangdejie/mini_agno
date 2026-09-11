@@ -1,4 +1,7 @@
+from collections.abc import AsyncIterator
 from dotenv import load_dotenv
+
+from mini_agno.models.stream import ToolCallAccumulator
 load_dotenv()
 
 import json
@@ -55,7 +58,7 @@ class OpenAIModel(Model):
             kwargs["tools"] = tools
         return kwargs
     
-    def _parse_response(self, resp: dict) -> ModelResponse:
+    def _parse_response(self, resp) -> ModelResponse:
         choice = resp.choices[0].message
         tool_calls = []
         if choice.tool_calls is not None:
@@ -73,3 +76,23 @@ class OpenAIModel(Model):
     ) -> ModelResponse:
         resp = await self.aclient.chat.completions.create(**self._build_openai_messages(messages, tools))
         return self._parse_response(resp)
+
+    async def ainvoke_stream(
+        self, messages: list[Message], tools: list[dict] | None = None
+    ) -> AsyncIterator[ModelResponse]:
+        stream = await self.aclient.chat.completions.create(**self._build_openai_messages(messages, tools),stream=True)
+        acc = ToolCallAccumulator()
+        async for chunk in stream:
+            if not chunk.choices:
+                continue
+            delta = chunk.choices[0].delta
+            if delta.content:
+                yield ModelResponse(content=delta.content)
+            if delta.tool_calls:
+                for tc in delta.tool_calls:
+                    acc.add_fragment(index=tc.index,id=tc.id,name=tc.function.name,arguments=tc.function.arguments)
+        calls = acc.finalize()
+        if calls:
+            yield ModelResponse(tool_calls=calls)
+        
+
