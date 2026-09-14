@@ -37,7 +37,7 @@ mini-agno 会按这五层逐步搭建。
 
 ---
 
-## 12 个模块路线
+## 模块路线
 
 | # | 模块 | 对应 agno 源码 | 状态 |
 |---|---|---|---|
@@ -47,20 +47,57 @@ mini-agno 会按这五层逐步搭建。
 | 3 | 工具系统（@tool/Function/FunctionCall） | `tools/decorator.py`、`tools/function.py` | ✅ 完成 |
 | 4 | **Agent 主循环**（里程碑 M1） | `agent/agent.py` 的 `run`、`run/` | ✅ 完成（M1 达成） |
 | 5 | 结构化输出 | `agent.py` 的 `output_schema` | ✅ 完成（含真模型接入） |
-| 6 | 会话与持久化 | `db/base.py`、`db/schemas/` | ✅ 完成（模块 6 Step3：BaseDb + SqliteDb） |
+| 6 | 会话与持久化 | `db/base.py`、`db/schemas/` | ✅ 完成（BaseDb + SqliteDb） |
 | 7 | 记忆系统（跨会话） | `memory/manager.py` | ✅ 完成（MemoryManager + SQLite memory 表） |
 | 8 | RAG 知识库 | `knowledge/knowledge.py` | ✅ 完成（L1 字符串匹配版 Knowledge） |
-| 9 | 多智能体（Team） | `team/team.py`、`team/mode.py` | 🔧 进行中（⬅️ 下一个） |
-| 10 | 工作流（Workflow） | `workflow/step.py`、`workflow/types.py` | 未开始 |
-| 11 | 运行时 API 化（里程碑 M4） | `os/`（FastAPI + SSE） | 未开始 |
+| 9 | 多智能体（Team） | `team/team.py`、`team/mode.py`、`team/_default_tools.py` | ✅ 完成（sequential + coordinate 双模式） |
+| 10 | 工作流（Workflow） | `workflow/step.py`、`workflow/types.py` | ✅ 完成（Step + 顺序管道 + Condition 组合模式） |
+| 11 | 运行时 API 化（里程碑 M4） | `os/`（FastAPI + SSE） | ✅ 完成（M4 达成：POST /chat） |
+| 12 | 流式输出 + async（计划外增强） | `models/openai/chat.py` 的流式四件套 | ✅ 完成（ainvoke/arun + 流式全链路 + SSE） |
 
-**里程碑**：M1（模块 4 后，能跑带工具的 agent）· M4（模块 11 后，能 API 化）
+**里程碑**：M1（模块 4 后，能跑带工具的 agent）✅ · M4（模块 11 后，能 API 化）✅
+
+**模块 12 细目**：async 地基（`ainvoke`/`arun`，共用出/入站转换）→ `ToolCallAccumulator`（流式 tool_calls 碎片按 index 分桶拼装）→ `ainvoke_stream`/`arun_stream`（content 碎片即到即发、tool_calls 攒齐执行、`AsyncIterator[ModelResponse]` 帧协议）→ `POST /chat_stream`（SSE 端点 + lifespan 里 `aclose`）。
 
 ---
 
 ## 怎么跑
 
 ```bash
-uv sync          # 安装依赖（pydantic + pytest）
-uv run pytest    # 跑测试（当前 24 个测试全绿）
+uv sync          # 安装依赖（pydantic / pytest / openai / fastapi / uvicorn）
+uv run pytest    # 跑测试（当前 40 个测试全绿）
+```
+
+**真模型**：`.env` 里配 `DEEPSEEK_API_KEY=`，然后：
+
+```bash
+# 起服务（/chat 同步 + /chat_stream 流式 SSE）
+uv run uvicorn mini_agno.api:app --port 8000
+
+# 流式对话（-N 关掉 curl 缓冲才能看到逐帧到达）
+curl -N -X POST localhost:8000/chat_stream \
+  -H "Content-Type: application/json" \
+  -d '{"message": "查一下001烤房的温湿度", "session_id": "s1"}'
+
+# 各模块的验收 demo（带工具 / 多会话 / 持久化 / 记忆 / Team / Workflow / 流式打字机）
+uv run python examples/run_team.py
+uv run python examples/run_stream.py
+```
+
+离线开发不需要 key——测试全部走 `MockModel`（剧本化模型，还能模拟 tool_calls 碎片线况）。
+
+## 目录速览
+
+```
+mini_agno/
+├── agent.py            # Agent：ReAct 主循环（run/arun/arun_stream）
+├── team/               # Team：sequential 顺序链 + coordinate Leader 委派
+├── workflow/           # Step / Workflow 顺序管道 / Condition 条件分支
+├── models/             # Model ABC + MockModel + OpenAIModel（含流式）+ ToolCallAccumulator
+├── tools/              # Function / FunctionCall / @my_tool 装饰器
+├── db/                 # BaseDb 抽象 + SqliteDb（session 表 + memory 表）
+├── memory/             # MemoryManager：跨会话用户画像
+├── knowledge/          # Knowledge：L1 字符串匹配 RAG
+├── session.py          # Session：会话内历史
+└── api.py              # FastAPI：/chat + /chat_stream(SSE) + lifespan
 ```
