@@ -29,7 +29,7 @@
 | 9 | 多智能体（Team） | ✅ 完成 | 2026-09-09 |
 | 10 | 工作流（Workflow） | ✅ 完成 | 2026-09-09 |
 | 11 | 运行时 API 化（里程碑 M4） | ✅ 完成 | 2026-09-10 |
-| 12 | 流式输出 + async（计划外首推） | 🔧 进行中（Step 1-3 完成，剩 Step 4 SSE） | 2026-09-10~14 |
+| 12 | 流式输出 + async（计划外首推） | ✅ 完成 | 2026-09-10~14 |
 
 ---
 
@@ -542,3 +542,45 @@
 - [ ] demo run_stream.py 里的 try/except 会吞真实错误（保留是自己的决定，排查时先看它）
 - [ ] 将来要工具状态帧时：Agent 造自己的事件族（RunContentEvent/ToolRunEvent），不再借 ModelResponse
 - [ ] examples/bare_repro.py 留作排查记录（含在本次提交）
+
+---
+
+## 2026-09-14（Day 11 续，Step 4 收官 · 流式模块全剧终 🎉）
+
+### 完成的事
+
+**Step 4 · SSE 端点**
+- `api.py`：`POST /chat_stream`（async def + StreamingResponse，`media_type="text/event-stream"`），消费 `agent.arun_stream`，每帧包成 `data: {"content": "..."}\n\n`（`ensure_ascii=False` 保中文可读）
+- `/chat`（同步非流式）与 `/chat_stream`（流式）并存——同一个 agent 单例两种交付形态
+- **lifespan 正式上岗**：`FastAPI(lifespan=lifespan)`，shutdown 时 `await agent.model.aclose()`——Step 2 定义的应用级关闭点三个 Step 后兑现
+- ApiPost 真模型调通：帧级到达、多轮工具流完整
+
+### 学到的关键点
+
+**最后一棒做表示转换**：整条管线前几棒流 ModelResponse 帧（对象），只有 SSE 端点这一棒把帧序列化成 `data: ...\n\n` 文本——"保对象到最后、出门口才转字符串"兑现。
+
+**定义 ≠ 接线**：lifespan 函数写好后忘了 `FastAPI(lifespan=lifespan)`，aclose 永远不执行且**不报错**（不执行≠报错，测试抓不到）——岗位空悬类 bug 的第三次现身（aclose 进每次调用 / aclose 没人调 / lifespan 没挂上）。验证手段：钩子里打 print，亲眼看 shutdown 输出。
+
+**SSE 细节**：`\n\n` 双换行是帧终结符（少一个接收方认为帧没结束）；curl 要 `-N` 关缓冲否则"憋几秒一次蹦出"的假象；`ensure_ascii=False` 否则中文变 `仮`。
+
+**lifespan ≈ Spring `@PreDestroy`**：应用启动后/退出前各一个钩子位，资源关闭的标准居所。
+
+### 当前 mini-agno 状态
+- 40 个测试全绿
+- **流式模块（模块 12）全部完成**：ainvoke/arun + ainvoke_stream/arun_stream + SSE 端点，从 token 到浏览器全链路打通
+- mini-agno 至此：12 个计划模块 + 流式增强，具备真产品形态的完整骨架
+
+---
+
+## 下次从哪开始（毕业后方向剩余）
+
+1. **MCP 协议**：工具生态的 USB-C，mini-agno 当 MCP client 接外部工具服务器
+2. **RAG L2/L3**：TF-IDF → embedding + 向量库（pgvector）
+3. **eval**：怎么测 LLM 应用（agent_as_judge）
+4. agno 未探索地图：guardrails / reasoning / approval(HITL) / scheduler
+
+### 待办（记着）
+- [ ] api 层 TestClient 离线测试（流式端点也缺）
+- [ ] demo run_stream.py 里的 try/except 会吞真实错误（保留是自己的决定，排查时先看它）
+- [ ] 将来要工具状态帧时：Agent 造自己的事件族（RunContentEvent/ToolRunEvent），不再借 ModelResponse
+- [ ] examples/bare_repro.py 留作排查记录（含在 Step 3 提交）
