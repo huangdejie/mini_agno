@@ -6,7 +6,8 @@ readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
     "fastapi>=0.141.1",
-    "openai>=3.0.0",
+    "httpx[http2]>=0.28.1",
+    "openai>=3.13.0",
     "pydantic>=2.0",
     "python-dotenv>=1.2.3",
     "uvicorn>=0.52.4",
@@ -23,7 +24,6 @@ packages = ["mini_agno"]
 dev = [
     "pytest>=8.0",
     "black>=26.5.1",
-    "pytest-httpx>=0.36.2",
 ]
 
 [tool.pytest.ini_options]

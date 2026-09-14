@@ -29,6 +29,7 @@
 | 9 | 多智能体（Team） | ✅ 完成 | 2026-09-09 |
 | 10 | 工作流（Workflow） | ✅ 完成 | 2026-09-09 |
 | 11 | 运行时 API 化（里程碑 M4） | ✅ 完成 | 2026-09-10 |
+| 12 | 流式输出 + async（计划外首推） | 🔧 进行中（Step 1-3 完成，剩 Step 4 SSE） | 2026-09-10~14 |
 
 ---
 
@@ -470,3 +471,74 @@
 - [ ]（可选）给 `Function` 加 docstring `Args:` 解析（笔记里标了"待实践"）
 - [ ]（可选升级）Memory 语义相似度更新 / 按 topic 分类
 - 设计决策：Knowledge 和 Memory 很像但归属不同——Memory 按 user_id（用户画像），Knowledge 按知识库名（公开文档），谁都能查
+
+---
+
+## 2026-09-10 ~ 09-14（Day 8~11，流式模块 Step 1-3）
+
+> 毕业后首推方向开工：流式输出 + async。四步走：Step1 async 地基 → Step2 Model 层流式 → Step3 Agent 流式主循环 → Step4 SSE 端点（未完）。全程跨度最长、概念密度最高的一程。
+
+### 完成的事
+
+**Step 1（09-10）· async 地基**
+- `OpenAIModel`：`AsyncOpenAI` 客户端 + `ainvoke()`；抽取 `_build_openai_messages`/`_parse_response` 供同步/异步共用——同步异步只差中间"调 SDK"一行，出站/入站翻译完全复用（防腐层红利）
+- `Agent.arun()`：async 版主循环；抽取 `_prepare_message`/`_execute_tool_calls` 供 run/arun 共用；`_aextract_facts` 异步提炼
+- `Model.ainvoke` 标 `@abstractmethod`（契约的牙齿），MockModel.ainvoke 复用 invoke 剧本
+- 验收：并发 3 个 arun 0.8s（串行需 2s+）
+
+**Step 2（09-11）· Model 层流式**
+- 探针 `see_stream_vs_not.py` 四段对照：非流式一次到位 vs 流式碎片；**工具轮 arguments 被剁成 14 片、id/name 只在首片、双工具 index 分桶、平铺拼接把两个 JSON 焊死**——全部亲眼实证
+- `ToolCallAccumulator`：按 index 分桶拼装碎片；6 个单测含突变验证
+- `OpenAIModel.ainvoke_stream`：content 碎片即到即 yield，tool_calls 攒齐后一次性 yield（`if calls` 守卫）
+- `MockModel.ainvoke_stream`：content 切片吐 + arguments 剁两半再经 accumulator 拼回，剁碎与拼装 mock 内闭环，离线复现线上线况
+- `Model.ainvoke_stream` 进 ABC
+
+**Step 3（09-12~14）· Agent 流式主循环**
+- `Agent.arun_stream`：while + async for 嵌套；content 碎片**双轨**（攒整段进历史 + 转发碎片给上层）；tool_calls 到手执行工具进下一轮；收尾 upsert + 异步 memory 提炼
+- 五行评审修正：`full_content` 每轮清零（自言自语不焊进终答）/ `yield chunk` 信封不拆 / `await _aextract_facts` / `AsyncIterator[ModelResponse]` 注解 / output_schema 显式 raise
+- `tests/test_agent_stream.py`：五断言 + 突变校验（挪 full_content 出循环必红）
+- 资源两级：`async with stream`（每调用级）+ `Model.aclose()`（应用级，Step 4 FastAPI lifespan 上岗）
+- 真模型验收：双工具查询 → 拿真实温湿度流式输出分析
+
+### 学到的关键点
+
+**async 心智模型**：`await` 等的是这一次调用的结果，不等的是这台机器上其他所有活。收益不在单请求变快，在同线程能同时等 N 个 IO。asyncio.sleep（让出）vs time.sleep（焊死线程）；单线程协作式调度 = 无数据竞争 ≠ 无逻辑乱序（同 session 并发 arun 历史被搅乱，防御 = 并发流各用各的 session_id）。
+
+**Python async 的机制细节**：`async def`+函数体有 `yield` = 异步生成器，**不能 await**（TypeError），只能 `async for`——和返回 coroutine 的 `ainvoke` 是两个家族；`await` 只等 HTTP 响应头不等 body；生成器调用时一行不跑，首次迭代才开工（惰性）；签名注解在模块加载期求值（缺 import 全测试文件收集失败）。
+
+**流式线况（探针实证）**：content 碎片独立可用、即到即发；tool_calls 的 arguments 是剁碎的 JSON 片、只有首片带 id/name、按 index 分桶是唯一活路（平铺拼接在双工具时焊死两个 JSON，排队到达都救不了）；usage 包 choices 为空要防；工具轮的 content 是可选自言自语（finish_reason 区分轮型：stop=文本轮，tool_calls=工具轮）。`delta` 每包只装增量。
+
+**协议设计三连问（自己推出来的）**：① 为什么帧是对象不是 str——交付物有几种可能才需要信封（流式帧 N 种且会增长，str 装不下"类型"）；② 为什么 run/arun 返回裸值——终答只有一种可能，歧义为零不需要信封（但模型→Agent 内部仍用信封区分文本/工具轮）；③ Agent 借 ModelResponse 是务实简化（形状刚好够用），agno 真实设计是 Agent 自己的事件族（RunContentEvent），升级触发点=要发工具状态帧/usage 的那天。**帧需要自报身份，成品不需要**。
+
+**yield**：return 交值函数死亡，yield 交值冻结原地等唤醒；生成器=编译器替你写 Iterator 状态机（Java 手写 hasNext/next 的痛，C# 有 yield return）；`for x in` = next 舞蹈自动化。
+
+**资源所有权**：stream 活一次调用（async with，ResultSet）；aclient 活一个应用（aclose，DataSource/连接池）；把 aclose 塞进每次调用 = 第二次调用必炸（两次实证）。同步客户端也要关（aclose 里补 `self.client.close()`）。
+
+### 坑 & 易错点
+
+- **假测试三连**：纯 print 无断言 / 收集到列表就 return 无断言 / 剧本第二幕没被消费——"代码跑完了"≠"代码对了"，**写完自检：故意改坏实现，测试必须红**（突变校验法）
+- **单样本会骗，包括老师**：我用一次 /tmp 实验断言"凶手是 aclose"，被用户复现打脸；二分定位每次结论都要可复现验证。最小复现（bare_repro.py）是排查收尾的黄金动作
+- **抽取重构三坑**：原处变量名带进新方法（resp NameError）/ 搬代码块丢缩进（knowledge 注入）/ 类型注解未 import
+- **批量文本操作的爆炸半径**：一次 sed 想改 arun_stream 的 while，把 run/arun 的同名 while 也炸了——三个 `while True` 长得一模一样，sed 分不清
+- **栈噪音止损**：httpcore2 teardown 时"generator didn't stop after athrow()"，非确定性、与代码无关（bare_repro 实证）、升级 openai 3.13.0 后变罕见——**四组实验证明到极限后接受+记录，不再追**。try/except 拦不住它（不经过用户调用栈），且吞真实错误
+- **屏幕正常 ≠ 历史干净**：流式观感里自言自语和终答连着流是正常的；full_content 污染只发生在 session 历史，只有断言历史的测试能抓住
+
+### 当前 mini-agno 状态
+- 40 个测试全绿
+- 流式模块 Step 1-3 完成：ainvoke/arun + ainvoke_stream/arun_stream 全链路，openai 升级 3.13.0
+- 剩 Step 4：FastAPI SSE 端点（curl -N 看打字机 + aclose 在 lifespan 上岗）
+
+---
+
+## 下次从哪开始
+
+**流式模块 Step 4 · SSE 端点（最后一站）**
+- `api.py` 加 `POST /chat/stream`：async def + StreamingResponse(media_type="text/event-stream")
+- 每帧 `f"data: {json.dumps(...)}\n\n"`（两个换行是协议，少一个帧不结束）
+- curl -N 验收打字机；TestClient 离线测（iter_lines）
+- lifespan shutdown 里 `await agent.model.aclose()`（aclose 正式上岗）
+
+### 待办（记着）
+- [ ] demo run_stream.py 里的 try/except 会吞真实错误（保留是自己的决定，排查时先看它）
+- [ ] 将来要工具状态帧时：Agent 造自己的事件族（RunContentEvent/ToolRunEvent），不再借 ModelResponse
+- [ ] examples/bare_repro.py 留作排查记录（含在本次提交）

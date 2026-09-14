@@ -1,11 +1,10 @@
 from dataclasses import dataclass, field
-from typing import Any
-from mini_agno import knowledge
+from typing import Any, AsyncIterator
 from mini_agno.db.base import BaseDb
 from mini_agno.knowledge.knowledge import Knowledge
 from mini_agno.memory.manager import MemoryManager
 from mini_agno.models.base import Model
-from mini_agno.models.message import Message, ToolCall
+from mini_agno.models.message import Message, ModelResponse, ToolCall
 from mini_agno.session import Session
 from mini_agno.tools.function import Function, FunctionCall
 import json
@@ -194,3 +193,53 @@ class Agent:
         # 这里让大模型自己去提炼，然后存入memory
         resp = await self.model.ainvoke(messages=extract_messages, tools=[])
         return [line.strip("- ") for line in resp.content.split("\n") if line.strip()]
+
+    async def arun_stream(self, user_message: str, session_id: str = "default", user_id: str = "default") -> AsyncIterator[ModelResponse]:
+        iteration = 0
+        session = self._get_or_create_session(session_id, user_id)
+        self._prepare_message(user_message, session, user_id)
+        while True:
+            full_content = ""  # 每轮从空串重新攒，上一轮的自言自语不焊进终答
+            iteration += 1
+            if iteration > self.max_iterations:
+                raise RuntimeError("Max iterations reached")
+            resp = self.model.ainvoke_stream(
+                messages=session.messages, tools=[t.to_dict() for t in self.tools]
+            )
+            has_tool_calls = False
+            async for chunk in resp:
+                if chunk.content:
+                    full_content += chunk.content
+                    yield chunk
+                if chunk.tool_calls:
+                    has_tool_calls = True
+                    session.messages.append(
+                        Message(
+                            role="assistant",
+                            content=full_content,
+                            tool_calls=chunk.tool_calls,
+                        )
+                    )
+                    self._execute_tool_calls(chunk.tool_calls, session)
+            if has_tool_calls:
+                continue
+            else:
+                session.messages.append(
+                    Message(
+                        role="assistant",
+                        content=full_content,
+                    )
+                )
+                self._upsert_session(session)
+                if self.memory_manager is not None:
+                    facts = await self._aextract_facts(
+                        [m for m in session.messages if m.role in ("user", "tool")],
+                        user_id,
+                    )
+                    self.memory_manager.add_memories(user_id, facts)
+                if self.output_schema is not None:
+                    raise NotImplementedError("arun_stream 暂不支持 output_schema，请用 arun")
+                return
+    
+
+                

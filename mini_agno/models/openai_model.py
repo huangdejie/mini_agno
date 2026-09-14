@@ -9,7 +9,7 @@ from openai import AsyncOpenAI, OpenAI
 from os import getenv
 from mini_agno.models.base import Model
 from mini_agno.models.message import Message, ModelResponse, ToolCall
-from typing import Any
+from typing import Any, override
 
 
 class OpenAIModel(Model):
@@ -80,19 +80,25 @@ class OpenAIModel(Model):
     async def ainvoke_stream(
         self, messages: list[Message], tools: list[dict] | None = None
     ) -> AsyncIterator[ModelResponse]:
-        stream = await self.aclient.chat.completions.create(**self._build_openai_messages(messages, tools),stream=True)
-        acc = ToolCallAccumulator()
-        async for chunk in stream:
-            if not chunk.choices:
-                continue
-            delta = chunk.choices[0].delta
-            if delta.content:
-                yield ModelResponse(content=delta.content)
-            if delta.tool_calls:
-                for tc in delta.tool_calls:
-                    acc.add_fragment(index=tc.index,id=tc.id,name=tc.function.name,arguments=tc.function.arguments)
-        calls = acc.finalize()
-        if calls:
-            yield ModelResponse(tool_calls=calls)
+        # stream = await self.aclient.chat.completions.create(**self._build_openai_messages(messages, tools),stream=True)
+        async with await self.aclient.chat.completions.create(**self._build_openai_messages(messages, tools),stream=True) as stream:
+            acc = ToolCallAccumulator()
+            async for chunk in stream:
+                if not chunk.choices:
+                    continue
+                delta = chunk.choices[0].delta
+                if delta.content:
+                    yield ModelResponse(content=delta.content)
+                if delta.tool_calls:
+                    for tc in delta.tool_calls:
+                        acc.add_fragment(index=tc.index,id=tc.id,name=tc.function.name,arguments=tc.function.arguments)
+            calls = acc.finalize()
+            if calls:
+                yield ModelResponse(tool_calls=calls)
+    
+    @override
+    async def close(self) -> None:
+        self.client.close()
+        await self.aclient.close()
         
 
