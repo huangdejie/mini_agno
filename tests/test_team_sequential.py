@@ -31,6 +31,7 @@ def test_team_sequential():
     assert a2.sessions["default"].messages[0].role == "user"
     assert a2.sessions["default"].messages[0].content == "总结：输入很重要"
 
+
 def test_team_rejects_unsupported_mode():
     a2 = Agent(
         model=MockModel(
@@ -43,6 +44,7 @@ def test_team_rejects_unsupported_mode():
     )
     with pytest.raises(ValueError, match="Invalid mode"):
         Team(members=[a2], mode="parallel")
+
 
 def test_team_requires_at_least_one_member():
     with pytest.raises(ValueError, match="at least one member"):

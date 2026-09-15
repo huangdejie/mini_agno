@@ -17,7 +17,9 @@ from openai import AsyncOpenAI
 
 load_dotenv()
 
-client = AsyncOpenAI(base_url="https://api.deepseek.com", api_key=getenv("DEEPSEEK_API_KEY"))
+client = AsyncOpenAI(
+    base_url="https://api.deepseek.com", api_key=getenv("DEEPSEEK_API_KEY")
+)
 MODEL = "deepseek-chat"
 
 
@@ -36,10 +38,11 @@ async def part1_non_stream_text():
     print(f"  完整 content: {resp.choices[0].message.content!r}")
     print(f"  你在这 {elapsed:.2f} 秒里什么都看不到，拿到时已是成品\n")
 
+
 async def part2_non_stream_text_tool():
-    print("="*60)
+    print("=" * 60)
     print("第 2 段：非流式 + 工具调用 —— 等到底，一次拿到")
-    print("="*60)
+    print("=" * 60)
     t0 = time.time()
     tools = [
         {
@@ -50,7 +53,10 @@ async def part2_non_stream_text_tool():
                 "parameters": {
                     "type": "object",
                     "properties": {
-                        "bake_house": {"type": "string", "description": "烤房编号，如 001"}
+                        "bake_house": {
+                            "type": "string",
+                            "description": "烤房编号，如 001",
+                        }
                     },
                     "required": ["bake_house"],
                 },
@@ -64,17 +70,20 @@ async def part2_non_stream_text_tool():
                 "parameters": {
                     "type": "object",
                     "properties": {
-                        "bake_house": {"type": "string", "description": "烤房编号，如 001"}
+                        "bake_house": {
+                            "type": "string",
+                            "description": "烤房编号，如 001",
+                        }
                     },
                     "required": ["bake_house"],
                 },
             },
-        }
+        },
     ]
     resp = await client.chat.completions.create(
         model=MODEL,
         messages=[{"role": "user", "content": "查询烤房001的当前温度"}],
-        tools=tools
+        tools=tools,
     )
     elapsed = time.time() - t0
     msg = resp.choices[0].message
@@ -102,7 +111,9 @@ async def part3_stream_text():
     async for chunk in stream:
         elapsed = time.time() - t0
         if not chunk.choices:  # 最后的 usage 包
-            print(f"[{elapsed:5.2f}s] 第{chunks + 1}包: 无 choices，只有 usage={chunk.usage is not None}")
+            print(
+                f"[{elapsed:5.2f}s] 第{chunks + 1}包: 无 choices，只有 usage={chunk.usage is not None}"
+            )
             continue
         delta = chunk.choices[0].delta
         finish = chunk.choices[0].finish_reason
@@ -127,7 +138,10 @@ async def part4_stream_tool_call():
                 "parameters": {
                     "type": "object",
                     "properties": {
-                        "bake_house": {"type": "string", "description": "烤房编号，如 001"}
+                        "bake_house": {
+                            "type": "string",
+                            "description": "烤房编号，如 001",
+                        }
                     },
                     "required": ["bake_house"],
                 },
@@ -141,12 +155,15 @@ async def part4_stream_tool_call():
                 "parameters": {
                     "type": "object",
                     "properties": {
-                        "bake_house": {"type": "string", "description": "烤房编号，如 001"}
+                        "bake_house": {
+                            "type": "string",
+                            "description": "烤房编号，如 001",
+                        }
                     },
                     "required": ["bake_house"],
                 },
             },
-        }
+        },
     ]
     t0 = time.time()
     stream = await client.chat.completions.create(
@@ -175,7 +192,9 @@ async def part4_stream_tool_call():
                 )
                 pieces.append(frag_args or "")
         if chunk.choices[0].finish_reason:
-            print(f"[{time.time() - t0:5.2f}s] finish_reason={chunk.choices[0].finish_reason!r}")
+            print(
+                f"[{time.time() - t0:5.2f}s] finish_reason={chunk.choices[0].finish_reason!r}"
+            )
     full = "".join(pieces)
     print(f"-- 拼起来的 arguments: {full!r}")
     print(f"-- 这串才等于非流式里的完整 arguments，收到任何一片单独时都是废的\n")

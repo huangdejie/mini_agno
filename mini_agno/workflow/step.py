@@ -1,4 +1,3 @@
-
 from dataclasses import dataclass
 from typing import Callable
 
@@ -7,8 +6,8 @@ from mini_agno.agent import Agent
 
 @dataclass
 class Step:
-    name:str | None = None
-    agent:Agent | None = None
+    name: str | None = None
+    agent: Agent | None = None
     func: Callable | None = None
 
     def __post_init__(self):
@@ -19,7 +18,7 @@ class Step:
         if not self.name:
             self.name = self.func.__name__ if self.func else self.agent.name
 
-    def run(self,input:str) -> str:
+    def run(self, input: str) -> str:
         if self.agent:
             return self.agent.run(input)
         elif self.func:

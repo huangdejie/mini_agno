@@ -64,8 +64,12 @@ class MockModel(Model):
             for index, tc in enumerate(resp.tool_calls):
                 args_str = json.dumps(tc.arguments)
                 half = max(1, len(args_str) // 2)  # 防空串/极短串切出 0
-                acc.add_fragment(index=index, id=tc.id, name=tc.name, arguments=args_str[:half])
-                acc.add_fragment(index=index, id=None, name=None, arguments=args_str[half:])
+                acc.add_fragment(
+                    index=index, id=tc.id, name=tc.name, arguments=args_str[:half]
+                )
+                acc.add_fragment(
+                    index=index, id=None, name=None, arguments=args_str[half:]
+                )
             calls = acc.finalize()
             if calls:
                 yield ModelResponse(tool_calls=calls)

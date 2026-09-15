@@ -49,7 +49,9 @@ def test_agent_stream_tool_round_and_history():
     history = agent.sessions["default"].messages
 
     # 1) 转发轨道：收到的所有 content 帧拼起来 = 两轮文本之和
-    assert "".join(f.content for f in frames if f.content) == "我来查一下001烤房温度38.2度"
+    assert (
+        "".join(f.content for f in frames if f.content) == "我来查一下001烤房温度38.2度"
+    )
 
     # 2) 历史结构：user -> assistant(自言自语+tool_calls) -> tool(结果) -> assistant(终答)
     assert [m.role for m in history] == ["user", "assistant", "tool", "assistant"]

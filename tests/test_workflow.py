@@ -29,20 +29,27 @@ NEWS_TEXT = """
             针对下半年行业走势，中汽协发布报告指出，“两新”政策将继续有序实施，汽车后市场消费有望迎来新的增量机遇，企业新品供给持续丰富，市场价格相对稳定，行业整体经济运行将进一步好转。同时也要看到，外部形势复杂多变、不确定性持续增加，内需不足问题依然突出，行业运行仍面临较大压力。需要稳定政策预期，强化引导监管，密切关注国际形势变化，有效应对风险挑战，稳步开拓国际市场。
         """
 
+
 def search_news(input: str):
-        return NEWS_TEXT
-
-
+    return NEWS_TEXT
 
 
 def test_seq_workflow():
     step1 = Step(name="search_news", func=search_news)
-    response_list = [ModelResponse(content="上半年新车销量中新能源占比近50%，传统燃油车市场进一步萎缩")]
-    step2 = Step(name="总结新闻信息", agent=Agent(model=MockModel(id="1", response_list=response_list),tools=[]))
+    response_list = [
+        ModelResponse(
+            content="上半年新车销量中新能源占比近50%，传统燃油车市场进一步萎缩"
+        )
+    ]
+    step2 = Step(
+        name="总结新闻信息",
+        agent=Agent(model=MockModel(id="1", response_list=response_list), tools=[]),
+    )
     workflow = Workflow(steps=[step1, step2])
     resp = workflow.run("帮我查看最新的新闻")
     print(resp)
     assert "燃油" in resp
+
 
 def search_connect_info(input: str):
     if "新闻" in input:
@@ -50,30 +57,42 @@ def search_connect_info(input: str):
     else:
         return "jdbc://localhost:3306/test_abcd"
 
+
 def judge_mysql_connect_info(input: str):
     if "mongodb:" in input:
         return False
     else:
         return True
 
+
 def test_condition_workflow():
     step1 = Step(name="search_connect_info", func=search_connect_info)
 
-    then_step_01 = Step(name="从DB中获取相关数据", func=lambda x: "姓名:张三,性别:男,年龄:18")
+    then_step_01 = Step(
+        name="从DB中获取相关数据", func=lambda x: "姓名:张三,性别:男,年龄:18"
+    )
     then_step_02 = Step(name="获取姓名", func=lambda x: "张三")
-    else_step_01 = Step(name="从MONGODB中获取相关数据", func=lambda x: "上半年新车销量中新能源占比近50%，传统燃油车市场进一步萎缩")
+    else_step_01 = Step(
+        name="从MONGODB中获取相关数据",
+        func=lambda x: "上半年新车销量中新能源占比近50%，传统燃油车市场进一步萎缩",
+    )
     else_step_02 = Step(name="提取重要信息", func=lambda x: "新能源占比逐年增高")
 
-    then_steps = [then_step_01, then_step_02]   
+    then_steps = [then_step_01, then_step_02]
     else_steps = [else_step_01, else_step_02]
 
-    condition = Condition(name="从DB中获取相关数据", condition=judge_mysql_connect_info, then_steps=then_steps, else_steps=else_steps)
+    condition = Condition(
+        name="从DB中获取相关数据",
+        condition=judge_mysql_connect_info,
+        then_steps=then_steps,
+        else_steps=else_steps,
+    )
 
     workflow = Workflow(steps=[step1, condition])
     resp = workflow.run("帮我查询年龄最大的人员姓名")
     print(resp)
-    assert resp == '张三'
+    assert resp == "张三"
 
     resp = workflow.run("帮我查询最新的新闻")
     print(resp)
-    assert resp == '新能源占比逐年增高'
+    assert resp == "新能源占比逐年增高"

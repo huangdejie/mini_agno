@@ -6,7 +6,7 @@ from mini_agno.workflow.step import Step
 class Workflow:
     steps: list[Step]
 
-    def run(self,input:str) -> str:
+    def run(self, input: str) -> str:
         current_input = input
         for step in self.steps:
             current_input = step.run(current_input)

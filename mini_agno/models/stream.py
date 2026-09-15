@@ -45,7 +45,7 @@ class ToolCallAccumulator:
 
     def finalize(self) -> list[ToolCall]:
         tool_calls = []
-        for index in sorted(self._buckets):   # 按 index 升序，不依赖碎片的到达顺序
+        for index in sorted(self._buckets):  # 按 index 升序，不依赖碎片的到达顺序
             value = self._buckets[index]
             tool_call = ToolCall(
                 id=value["id"],

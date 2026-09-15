@@ -2,9 +2,10 @@ from dataclasses import dataclass
 from typing import Callable, override
 from mini_agno.workflow.step import Step
 
+
 @dataclass(kw_only=True)
 class Condition(Step):
-    condition: Callable[[str],bool]
+    condition: Callable[[str], bool]
     then_steps: list[Step]
     else_steps: list[Step]
 
@@ -16,7 +17,7 @@ class Condition(Step):
         if self.else_steps is None:
             raise ValueError("Condition must have else_steps")
 
-    @override   
+    @override
     def run(self, input: str) -> str:
         if self.condition(input):
             for step in self.then_steps:
