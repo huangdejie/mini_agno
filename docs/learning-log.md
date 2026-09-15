@@ -31,6 +31,7 @@
 | 11 | 运行时 API 化（里程碑 M4） | ✅ 完成 | 2026-09-10 |
 | 12 | 流式输出 + async（计划外首推） | ✅ 完成 | 2026-09-10~14 |
 | 13 | MCP 协议（计划外·工具生态） | ✅ 完成 | 2026-09-15 |
+| 14 | eval（计划外·质量度量） | ✅ 完成 | 2026-09-15 |
 
 ---
 
@@ -607,6 +608,44 @@
 - [ ] `skip_auto_schema` 的离线单测还没写
 - [ ] `connect()` 调两次会重复堆工具（加幂等守卫）
 - [ ] MCPTools 也该进 api.py 的 lifespan 管理（服务器形态）
+
+---
+
+## 2026-09-15（Day 12 续，eval 模块收官）
+
+### 完成的事
+
+**模块 14 · eval：给没有标准答案的输出造尺子**
+- `mini_agno/eval/`：`case.py`（EvalCase + YAML 用例集加载）、`judge.py`（JudgeResult + make_judge 裁判工厂）、`runner.py`（run_keyword_case / run_judge_case / run_eval 全流程编排）、`report.py`（CaseResult + EvalReport 聚合）
+- keyword 模式（L1 软断言：必含关键词）+ judge 模式（L3 LLM-as-judge：裁判 Agent + output_schema 吐 `{score, reason}`）
+- **用 mini-agno 评测 mini-agno**：裁判就是自家 Agent，output_schema 复用模块 5
+- 5 个离线测试（含 run_eval 全流程聚合：剧本 4 用例断言 `(1,2)`/`5.5`/分布/失败清单），45 全绿
+- **压轴突变校验**：基线 10.0 → 规则故意写反 1.5，失败清单的 feedback 精准定位“方向性错误”——尺子有牙齿
+- `examples/run_eval.py --mutate` 一键对比
+
+### 学到的关键点
+
+**eval = 给 LLM 输出写的 pytest**。整个模块只有一个新思想：**断言器可以是个 Agent**。其余全是 pytest 结构的重写（yaml 用例集=test 文件、run_eval=运行器、print_summary=末尾那行 42 passed）。乱感的解药是找对照框架——感觉乱往往不是问题难，是缺一个熟悉的心智锚点。
+
+**测试的阶梯**：L0 确定性管道测试（MockModel+精确断言，45 个测试全是）→ L1 软断言（结构性质/关键词）→ L2 参考答案比对 → L3 LLM-as-judge → L4 人工抽检。**分数是统计量**：对分布断言不对单点（平均分/分布/阈值筛选，JMH 的 p99 思想）。
+
+**真模型的结构化输出会漂移**：裁判吐 `{"score":3,"reason":...}` 而 schema 叫 feedback——字段名是契约但模型有自己的偏好。轻修：pydantic `Field(alias="reason")` + `populate_by_name=True` 两个键都收；根治：OpenAI 原生 response_format 强制 schema（老待办又+1 例证）。instructions 里显式写键名也能提高稳定性。
+
+**尺子先量尺子**：第一次基线跑分 judge 给了 1 分——但被抓的是**用例自身的缺陷**（输入没带数据，agent 合理反问被 rubric 判死）。eval 上线第一件事往往是修用例集，不是修 agent：每条用例必须给 agent 展示能力的公平输入。
+
+**`passed is False` vs `not passed`**：judge 用例的 passed 是 None（falsy），`not r.passed` 会误伤；`is False` 精确匹配。None/False 二义性经典雷。
+
+### 坑 & 易错点（三大惯犯在 eval 模块全部再犯，全部被抓住）
+
+- **假测试第四季**：测试调用了 run_keyword_case 但返回值扔了，零断言——写完必须自问“改坏实现它会红吗”
+- **编造字段/参数名**：`output_parser=`（Agent 没这字段，构造即炸，我当场引爆）、`ToolCall(args=)`、`MockModel(name=)`——对 API 的记忆模糊时先翻定义，别凭印象写
+- **定义≠接线第四次**：`run_eval(judge_mode=...)` 收了参数但从没传给 make_judge——离线测试就做不了
+- **写完不跑**：测试文件带着 4 个错（缺 import ×2、编造字段 ×2）直接交付，一条 `uv run pytest` 9ms 全暴露——“写完立刻跑”仍未刻进肌肉
+
+### 当前 mini-agno 状态
+- 45 个测试全绿
+- **模块 14 完成**：eval 尺子就位，prompt/模型变更从此有涨跌数字
+- 14 个模块：12 计划内 + 流式 + MCP + eval
 
 ---
 
