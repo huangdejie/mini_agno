@@ -30,6 +30,7 @@
 | 10 | 工作流（Workflow） | ✅ 完成 | 2026-09-09 |
 | 11 | 运行时 API 化（里程碑 M4） | ✅ 完成 | 2026-09-10 |
 | 12 | 流式输出 + async（计划外首推） | ✅ 完成 | 2026-09-10~14 |
+| 13 | MCP 协议（计划外·工具生态） | ✅ 完成 | 2026-09-15 |
 
 ---
 
@@ -569,6 +570,43 @@
 - 40 个测试全绿
 - **流式模块（模块 12）全部完成**：ainvoke/arun + ainvoke_stream/arun_stream + SSE 端点，从 token 到浏览器全链路打通
 - mini-agno 至此：12 个计划模块 + 流式增强，具备真产品形态的完整骨架
+
+---
+
+## 2026-09-15（Day 12，MCP 模块收官）
+
+### 完成的事
+
+**模块 13 · MCP 协议（工具生态的 USB-C）**
+- Step 1 手搓体验：`examples/mcp_server_bake.py`（fastmcp `@mcp.tool` 把烤房工具包成 stdio server）+ `mcp_client_bake.py`（裸 client：`list_tools()` 看 server 自报 schema、手动 `call_tool`）——server 自报的 `input_schema` 和自己 `Function.to_dict()` 的 `parameters` 一模一样，两端各有一份 schema 反射逻辑
+- Step 2 接入层 `mini_agno/tools/mcp_tools.py`：connect（手动 `__aenter__` 开门 + list_tools + 造 Function）→ get_functions → disconnect；每个工具一个 async 闭包 entrypoint（闭包焊工具名，`**kwargs` 转发）
+- Step 3 端到端：`run_mcp_agent.py` 真模型打通——agent 调工具 = JSON-RPC 转发给**另一个进程**执行，"烤房002的温度是38.2"从子进程回来
+- 两堵墙都拆了：**墙1** `Function` 加 `skip_auto_schema`（schema 三来源：反射/docstring/**server 自报**，agno 的 `skip_entrypoint_processing` 同款）；**墙2** `FunctionCall.aexecute()` 双模（同步/异步 entrypoint 通吃）+ 同步 `execute()` 误用 async 工具时抛**带修法指引的 TypeError**
+- 超出布置的发挥：`_aexecute_tool_calls` 用 **`asyncio.gather` 并发执行**同轮多个工具（gather 保序，消息顺序确定）；`_build_tool_message` 统一消息构造
+
+### 学到的关键点
+
+**MCP 的本质：把工具的"定义"和"执行"从进程内解耦到协议两端**。之前工具是 agent 代码里的函数（schema 靠反射）；MCP 后工具是 server 自报的（name/description/JSON Schema 都由提供方声明），执行转发到 server 进程。**解耦的兑现：烤房团队改温度算法，agent 代码零改动，重发布 server 即可**。
+
+**模块 3 造的 Function 抽象恰好是 MCP 的插槽**：MCPTools 是个薄适配器（生命周期/发现/代理三职责），产出 `list[Function]`，Agent 和主循环**一行不改**——远端工具进 Agent 手里和本地工具无差别。框架设计的正面验证：好的抽象让新接入方变成"胶水"而不是"改造"。
+
+**`async with X:` 的真身**：`await X.__aenter__()` + `await X.__aexit__(None,None,None)` 两句调用。糖管**块级**生命周期；手动调管**对象级**生命周期——MCPTools 的 session 要从 connect 活到 disconnect，没有缩进能罩住，只能手动开关门（合法逃生舱，agno 同款；enter/exit 必须同 task 配对——anyio cancel scope 的要求）。
+
+**schema 的三种来源**（本次理顺）：函数签名反射（本地工具默认）/ docstring Args / server 自报（MCP）。`Function` 从"只会反射"长成"三来源可选"。
+
+**async 工具的执行分家**：entrypoint 是 async 时，同步 `execute()` 拿到的是 coroutine 不是结果——同步/异步执行器分家（`_execute_tool_calls` / `_aexecute_tool_calls`），同步 `run()` 不支持 MCP 工具（协议本身 async-only，诚实限制）。
+
+### 坑 & 易错点
+
+- **`await 同步方法`**：arun_stream 里写成 `await self._execute_tool_calls(...)`（同步版方法名），返回 None 被 await → `TypeError: object NoneType can't be used in 'await' expression`。**这次是全量测试抓住的**——改完全量测试再次实证价值
+- **格式化和功能不能混一个 commit**：全仓跑了格式化（逗号空格/两空行），1400 行 diff 里功能改动会被淹没——分"功能 commit + 格式化 commit"
+- fastmcp stdio server 用 `uv run` 拉起（command="uv", args=["run", ...]），别直接 python——环境对不上
+
+### 待办（记着）
+- [ ] `MCPTools.disconnect` 改名 `aclose`（与 Model.aclose 统一）+ 关完 `self._client = None` + demo 补 try/finally
+- [ ] `skip_auto_schema` 的离线单测还没写
+- [ ] `connect()` 调两次会重复堆工具（加幂等守卫）
+- [ ] MCPTools 也该进 api.py 的 lifespan 管理（服务器形态）
 
 ---
 

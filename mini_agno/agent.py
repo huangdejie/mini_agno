@@ -1,3 +1,4 @@
+import asyncio
 from dataclasses import dataclass, field
 from typing import Any, AsyncIterator
 from mini_agno.db.base import BaseDb
@@ -22,7 +23,7 @@ class Agent:
     knowledge: Knowledge | None = None
     name: str | None = None
     description: str | None = None
-    instructions: str | None = None # 给Agent的自定义 system 指令
+    instructions: str | None = None  # 给Agent的自定义 system 指令
 
     def _find_tool_call(self, tool_call: ToolCall) -> Function:
         for tool in self.tools:
@@ -51,11 +52,15 @@ class Agent:
         if self.db is not None:
             self.db.upsert_session(session)
 
-    def _prepare_message(self, user_message: str,session:Session, user_id: str = "default") -> None:
+    def _prepare_message(
+        self, user_message: str, session: Session, user_id: str = "default"
+    ) -> None:
         # 在第一次的时候，如果存在自定义的system消息，则加入
         if not session.messages:
             if self.instructions:
-                session.messages.append(Message(role="system", content=self.instructions))
+                session.messages.append(
+                    Message(role="system", content=self.instructions)
+                )
             if self.knowledge is not None:
                 docs = self.knowledge.search(user_message)
                 if docs:
@@ -76,16 +81,47 @@ class Agent:
                     session.messages.append(system_msg)
 
         session.messages.append(Message(role="user", content=user_message))
-        
-    def _execute_tool_calls(self,tool_calls:list[ToolCall],session:Session) -> None:
+
+    def _build_tool_message(self, tool_call: ToolCall, content: str) -> Message:
+        return Message(
+            role="tool",
+            content=content,
+            tool_call_id=tool_call.id,
+        )
+
+    async def _aexecute_single_tool(self, tool_call: ToolCall) -> Message:
+        """纯函数，执行单个工具并返回Message"""
+        func = self._find_tool_call(tool_call)
+        if func is None:
+            return self._build_tool_message(
+                tool_call, f"Error: Tool {tool_call.name} not found"
+            )
+        func_call = FunctionCall(func, tool_call.arguments)
+        try:
+            func_result = await func_call.aexecute()
+        except Exception as e:
+            func_result = f"Error executing {tool_call.name}: {e}"
+        return self._build_tool_message(tool_call, json.dumps(func_result, default=str))
+
+    async def _aexecute_tool_calls(
+        self, tool_calls: list[ToolCall], session: Session
+    ) -> None:
+        """异步批量执行：使用asyncio.gather 并发执行"""
+        if not tool_calls:
+            return
+
+        messages = await asyncio.gather(
+            *(self._aexecute_single_tool(tc) for tc in tool_calls)
+        )
+        session.messages.extend(messages)
+
+    def _execute_tool_calls(self, tool_calls: list[ToolCall], session: Session) -> None:
         for tool_call in tool_calls:
             func = self._find_tool_call(tool_call)
             if func is None:
                 session.messages.append(
-                    Message(
-                        role="tool",
-                        content=f"Error: Tool {tool_call.name} not found",
-                        tool_call_id=tool_call.id,
+                    self._build_tool_message(
+                        tool_call, f"Error: Tool {tool_call.name} not found"
                     )
                 )
                 continue
@@ -95,10 +131,8 @@ class Agent:
             except Exception as e:
                 func_result = f"Error executing {tool_call.name}: {e}"
             session.messages.append(
-                Message(
-                    role="tool",
-                    content=json.dumps(func_result, default=str),
-                    tool_call_id=tool_call.id,
+                self._build_tool_message(
+                    tool_call, json.dumps(func_result, default=str)
                 )
             )
 
@@ -138,7 +172,7 @@ class Agent:
                 if self.output_schema is not None:
                     return self.output_schema.model_validate_json(resp.content)
                 return resp.content
-    
+
     async def arun(
         self, user_message: str, session_id: str = "default", user_id: str = "default"
     ) -> Any:
@@ -161,7 +195,7 @@ class Agent:
                 )
             )
             if resp.tool_calls:
-                self._execute_tool_calls(resp.tool_calls, session)
+                await self._aexecute_tool_calls(resp.tool_calls, session)
             else:
                 self._upsert_session(session)
                 # 这里如果将大模型的回答放入memory，一旦大模型错误的，可能会有错误，所以只筛选用户输入和工具调用的
@@ -175,7 +209,7 @@ class Agent:
                 if self.output_schema is not None:
                     return self.output_schema.model_validate_json(resp.content)
                 return resp.content
-    
+
     def _extract_facts(self, messages: list[Message], user_id: str) -> list[str]:
         prompt = """
         从以下对话中提取关于用户的持久事实(如姓名、偏好、背景等)。只返回事实列表，每行一条，不要调用工具，不要有多余解释。
@@ -194,7 +228,9 @@ class Agent:
         resp = await self.model.ainvoke(messages=extract_messages, tools=[])
         return [line.strip("- ") for line in resp.content.split("\n") if line.strip()]
 
-    async def arun_stream(self, user_message: str, session_id: str = "default", user_id: str = "default") -> AsyncIterator[ModelResponse]:
+    async def arun_stream(
+        self, user_message: str, session_id: str = "default", user_id: str = "default"
+    ) -> AsyncIterator[ModelResponse]:
         iteration = 0
         session = self._get_or_create_session(session_id, user_id)
         self._prepare_message(user_message, session, user_id)
@@ -220,7 +256,7 @@ class Agent:
                             tool_calls=chunk.tool_calls,
                         )
                     )
-                    self._execute_tool_calls(chunk.tool_calls, session)
+                    await self._aexecute_tool_calls(chunk.tool_calls, session)
             if has_tool_calls:
                 continue
             else:
@@ -238,8 +274,7 @@ class Agent:
                     )
                     self.memory_manager.add_memories(user_id, facts)
                 if self.output_schema is not None:
-                    raise NotImplementedError("arun_stream 暂不支持 output_schema，请用 arun")
+                    raise NotImplementedError(
+                        "arun_stream 暂不支持 output_schema，请用 arun"
+                    )
                 return
-    
-
-                

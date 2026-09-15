@@ -1,4 +1,6 @@
 from dataclasses import dataclass
+import inspect
+
 from inspect import Parameter, signature
 from typing import Any, Callable, Optional, get_type_hints
 
@@ -11,8 +13,11 @@ class Function:
     name: str = ""
     description: str = ""
     parameters: Optional[dict] = None
+    skip_auto_schema: bool = False  # 是否跳过自动生成参数定义
 
     def __post_init__(self):
+        if self.skip_auto_schema:
+            return
         if not self.name:
             self.name = self.entrypoint.__name__
         if not self.description:
@@ -66,4 +71,17 @@ class FunctionCall:
     arguments: dict
 
     def execute(self) -> Any:
-        return self.function.entrypoint(**self.arguments)
+        result = self.function.entrypoint(**self.arguments)
+        if inspect.isawaitable(result):
+            raise TypeError(
+                f"Tool '{self.function.name}' is async. "
+                f"Use 'await func_call.aexecute()' instead of 'func_call.execute()'."
+            )
+        return result
+
+    async def aexecute(self) -> Any:
+        """异步执行：自动兼容同步和异步底层函数"""
+        result = self.function.entrypoint(**self.arguments)
+        if inspect.isawaitable(result):
+            return await result
+        return result
