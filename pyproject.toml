@@ -32,3 +32,6 @@ dev = [
 testpaths = ["tests"]
 pythonpath = ["."]
 addopts = "-v"
+
+[tool.black]
+target-version = ["py312"]
